@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GestFast - ERP Padaria Nova York</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Cabeçalho Superior Global -->
+  <header class="top-header">
+    <div class="header-left">
+      <div class="logo-box">
+        <span class="logo-title">GEST FAST #</span>
+        <span class="logo-subtitle">Padaria Nova York • ERP</span>
+      </div>
+      <button class="nav-icon-btn" id="btn-header-home" title="Voltar ao Início">🏠</button>
+    </div>
+
+    <!-- Barra de Pesquisa Global com Sugestões -->
+    <div class="search-container">
+      <div class="search-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="global-search" placeholder="Verificar estoque, produto, código de barras..." autocomplete="off">
+        <button id="search-clear-btn" class="clear-btn" style="display: none;">&times;</button>
+      </div>
+      <div id="search-results-dropdown" class="search-dropdown" style="display: none;">
+        <div class="search-dropdown-header">Produtos Encontrados:</div>
+        <div id="search-results-list" class="search-dropdown-list"></div>
+      </div>
+    </div>
+
+    <!-- Identificação do Usuário Logado -->
+    <div class="user-profile-header">
+      <div class="user-avatar" id="header-user-avatar">F</div>
+      <div class="user-info">
+        <span class="user-name" id="header-user-name">Francisco</span>
+        <span class="user-role" id="header-user-role">Proprietário (Admin)</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-layout">
+    <!-- Menu Lateral Esquerdo -->
+    <aside class="sidebar">
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">PRINCIPAL</div>
+        <a href="#dashboard" class="nav-item active" data-view="dashboard">
+          <span class="nav-icon">📊</span> Início (Dashboard)
+        </a>
+        <a href="#estoque" class="nav-item" data-view="estoque">
+          <span class="nav-icon">📦</span> Verificar Estoque
+        </a>
+        <a href="#requisicoes" class="nav-item" data-view="requisicoes">
+          <span class="nav-icon">📝</span> Requisição Fornecedor
+        </a>
+        <a href="#cadastro" class="nav-item" data-view="cadastro">
+          <span class="nav-icon">🏷️</span> Cadastro de Produtos
+        </a>
+        <a href="#movimentacoes" class="nav-item" data-view="movimentacoes">
+          <span class="nav-icon">🔄</span> Entrada & Saída
+        </a>
+        <a href="#vendas" class="nav-item" data-view="vendas">
+          <span class="nav-icon">🛒</span> Vendas (Caixa PDV)
+        </a>
+        <a href="#relatorios" class="nav-item" data-view="relatorios">
+          <span class="nav-icon">📈</span> Relatórios do Dia
+        </a>
+        <div class="nav-section-title">SISTEMA</div>
+        <a href="#configuracoes" class="nav-item" data-view="configuracoes">
+          <span class="nav-icon">⚙️</span> Configuração
+        </a>
+        <a href="#ajuda" class="nav-item" data-view="ajuda">
+          <span class="nav-icon">❓</span> Ajuda & Suporte
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <strong>GestFast v1.2</strong>
+        <p>PIM / PE - ADS USCS</p>
+      </div>
+    </aside>
+
+    <!-- Área de Conteúdo Principal (Visões / Abas) -->
+    <main class="main-content">
+      
+      <!-- ============================================== -->
+      <!-- 1. ABA: DASHBOARD / INÍCIO -->
+      <!-- ============================================== -->
+      <section id="view-dashboard" class="app-view active">
+        <div class="view-header-bar">
+          <div>
+            <h1 class="page-title">Painel de Controle e Resumo</h1>
+            <p class="page-subtitle">Acompanhamento ágil das operações da Padaria Nova York</p>
+          </div>
+          <div class="quick-stats-bar">
+            <div class="stat-pill red"><span id="dash-alertas-count">0</span> Alertas Críticos</div>
+            <div class="stat-pill blue"><span id="dash-requisicoes-count">0</span> Requisições Abertas</div>
+            <div class="stat-pill green"><span id="dash-total-itens">0</span> Unidades em Estoque</div>
+            <div class="stat-pill yellow">R$ <span id="dash-faturamento-dia">0,00</span> Faturamento Hoje</div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <!-- Janela 1: Alertas Críticos (RF 11) -->
+          <div class="dashboard-card border-danger">
+            <div class="card-header">
+              <h2>⚠️ Alertas de Estoque Crítico</h2>
+              <span class="badge-urgent">Necessita Solicitar!</span>
+            </div>
+            <div class="card-body">
+              <div id="dash-alertas-list" class="alert-list"></div>
+            </div>
+            <div class="card-footer">
+              <button class="btn btn-secondary btn-sm" id="btn-dash-atualizar-alertas">🔄 Atualizar</button>
+              <button class="btn btn-primary btn-sm" id="btn-dash-solicitar-todos">📝 Solicitar ao Fornecedor</button>
+            </div>
+          </div>
+
+          <!-- Janela 2: Requisições e Compras Recentes -->
+          <div class="dashboard-card">
+            <div class="card-header">
+              <h2>📦 Compras & Requisições Recentes</h2>
+              <button class="btn btn-primary btn-sm" id="btn-dash-nova-requisicao">+ Nova Requisição</button>
+            </div>
+            <div class="card-body">
+              <table class="data-table">
+                <thead>
+                  <tr><th>Produto</th><th>Qtd.</th><th>Fornecedor</th><th>Situação</th></tr>
+                </thead>
+                <tbody id="dash-tabela-compras"></tbody>
+              </table>
+            </div>
+            <div class="card-footer">
+              <button class="btn btn-secondary btn-sm" id="btn-dash-ver-todas-req">Ver Todas as Requisições</button>
+            </div>
+          </div>
+
+          <!-- Janela 3: Gráfico de Distribuição do Estoque (RF 10) -->
+          <div class="dashboard-card">
+            <div class="card-header">
+              <h2>📊 Proporção de Estoque por Categoria</h2>
+              <span class="badge-info">Tempo Real</span>
+            </div>
+            <div class="card-body chart-card-body">
+              <canvas id="stockDistributionCanvas" width="190" height="190"></canvas>
+              <div class="chart-legend" id="dash-chart-legend"></div>
+            </div>
+            <div class="card-footer">
+              <small class="text-muted">Equilíbrio e prevenção de rupturas de insumos</small>
+            </div>
+          </div>
+
+          <!-- Janela 4: Sugestões e Ações Rápidas -->
+          <div class="dashboard-card">
+            <div class="card-header">
+              <h2>💡 Sugestões Rápidas de Operação</h2>
+            </div>
+            <div class="card-body">
+              <div class="quick-actions-list">
+                <button class="quick-action-btn highlight" id="dash-btn-comprar-pao">
+                  <strong>🥖 Pedir Pão de Queijo</strong>
+                  <span>Estoque abaixo de 10 un</span>
+                </button>
+                <button class="quick-action-btn" id="dash-btn-ir-pdv">
+                  <strong>🛒 Abrir Caixa (PDV)</strong>
+                  <span>Registrar vendas no balcão</span>
+                </button>
+                <button class="quick-action-btn" id="dash-btn-conferir-estoque">
+                  <strong>📋 Conferência Física</strong>
+                  <span>Verificar contagem quinzenal</span>
+                </button>
+                <button class="quick-action-btn" id="dash-btn-cadastrar-novo">
+                  <strong>➕ Cadastrar Produto</strong>
+                  <span>Novo insumo ou mercadoria</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- 2. ABA: VERIFICAR ESTOQUE / CONFERÊNCIA FÍSICA -->
+      <!-- ============================================== -->
+      <section id="view-estoque" class="app-view">
+        <div class="view-header-bar">
+          <div>
+            <h1 class="page-title">Verificação & Conferência de Estoque</h1>
+            <p class="page-subtitle">Confronto entre o estoque registrado no sistema e a contagem física (RF 06)</p>
+          </div>
+          <div class="view-actions">
+            <span class="text-muted" id="estoque-ultima-verificacao">Data Verificação: <strong>Hoje</strong></span>
+            <button class="btn btn-primary" id="btn-salvar-conferencia">💾 Salvar Conferência</button>
+          </div>
+        </div>
+
+        <div class="card-panel">
+          <div class="filter-toolbar">
+            <input type="text" id="estoque-filtro-termo" placeholder="Filtrar por nome, código ou lote..." class="input-search">
+            <select id="estoque-filtro-categoria" class="select-field">
+              <option value="">Todas as Categorias</option>
+            </select>
+            <label class="checkbox-label">
+              <input type="checkbox" id="estoque-apenas-criticos"> Exibir apenas itens críticos
+            </label>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table styled-table">
+              <thead>
+                <tr>
+                  <th>Cód</th>
+                  <th>Descrição / Insumo</th>
+                  <th>Categoria</th>
+                  <th>Unid</th>
+                  <th>Estoque Sistema</th>
+                  <th>Contagem Física</th>
+                  <th>Divergência</th>
+                  <th>Lote</th>
+                  <th>Estoque Mín.</th>
+                  <th>Sugestão Compra</th>
+                </tr>
+              </thead>
+              <tbody id="estoque-tabela-corpo"></tbody>
+            </table>
+          </div>
+          <div class="panel-foot-note">
+            <p>💡 <em>Ao preencher a "Contagem Física", o sistema calcula a divergência em tempo real. Marque para aplicar a correção automática de saldo se necessário.</em></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- 3. ABA: REQUISIÇÃO FORNECEDOR -->
+      <!-- ============================================== -->
+      <section id="view-requisicoes" class="app-view">
+        <div class="view-header-bar">
+          <div>
+            <h1 class="page-title">Requisições de Compra para Fornecedores</h1>
+            <p class="page-subtitle">Solicitações de reposição enviadas e aprovações do setor financeiro (RF 05)</p>
+          </div>
+          <button class="btn btn-primary" id="btn-abrir-modal-req">+ Nova Requisição</button>
+        </div>
+
+        <div class="card-panel">
+          <div class="filter-toolbar">
+            <span class="filter-label">Filtrar Situação:</span>
+            <button class="btn btn-sm btn-secondary filter-req-btn active" data-status="TODOS">Todos</button>
+            <button class="btn btn-sm btn-secondary filter-req-btn" data-status="Em Aberto">Em Aberto</button>
+            <button class="btn btn-sm btn-secondary filter-req-btn" data-status="Finalizado">Finalizado</button>
+            <button class="btn btn-sm btn-secondary filter-req-btn" data-status="Cancelado">Cancelado</button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table styled-table">
+              <thead>
+                <tr>
+                  <th>Nº Pedido</th>
+                  <th>Fornecedor</th>
+                  <th>Produto Solicitado</th>
+                  <th>Qtd. Pedida</th>
+                  <th>Unid</th>
+                  <th>Valor Total</th>
+                  <th>Data</th>
+                  <th>Previsão</th>
+                  <th>Situação</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="requisicoes-tabela-corpo"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- 4. ABA: CADASTRO E EDIÇÃO DE PRODUTOS -->
+      <!-- ============================================== -->
+      <section id="view-cadastro" class="app-view">
+        <div class="view-header-bar">
+          <div>
+            <h1 class="page-title" id="cadastro-titulo-pagina">Cadastro de Produtos</h1>
+            <p class="page-subtitle">Manutenção do catálogo, especificações de custo, venda e estoque mínimo (RF 01)</p>
+          </div>
+          <button class="btn btn-secondary" id="btn-novo-produto-limpar">Limpar Formulário</button>
+        </div>
+
+        <div class="cadastro-layout">
+          <!-- Formulário de Cadastro / Edição -->
+          <div class="cadastro-form-container card-panel">
+            <form id="form-cadastro-produto">
+              <input type="hidden" id="prod-id">
+              
+              <div class="form-row">
+                <div class="form-group flex-2">
+                  <label for="prod-nome">Nome do Produto *</label>
+                  <input type="text" id="prod-nome" placeholder="Ex: Baguete Recheada" required>
+                </div>
+                <div class="form-group flex-1">
+                  <label for="prod-codigo">Código / Barras</label>
+                  <input type="text" id="prod-codigo" placeholder="78910099">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="prod-descricao">Descrição do Produto</label>
+                <textarea id="prod-descricao" rows="2" placeholder="Detalhes, ingredientes, receita ou aplicação..."></textarea>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="prod-categoria">Categoria *</label>
+                  <select id="prod-categoria" required></select>
+                </div>
+                <div class="form-group">
+                  <label for="prod-unidade">Unidade de Medida *</label>
+                  <select id="prod-unidade" required>
+                    <option value="UN">UN (Unidade)</option>
+                    <option value="KG">KG (Quilo)</option>
+                    <option value="Pacote">Pacote</option>
+                    <option value="DZ">DZ (Dúzia)</option>
+                    <option value="Fatia">Fatia</option>
+                    <option value="Lt">Lt (Litro)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="prod-peso">Peso / Embalagem</label>
+                  <input type="text" id="prod-peso" placeholder="Ex: 500g">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="prod-preco-custo">Preço de Custo (R$) *</label>
+                  <input type="number" id="prod-preco-custo" step="0.01" min="0" value="0.00" required>
+                </div>
+                <div class="form-group">
+                  <label for="prod-preco-venda">Preço de Venda (R$) *</label>
+                  <input type="number" id="prod-preco-venda" step="0.01" min="0.01" value="5.00" required>
+                </div>
+                <div class="form-group">
+                  <label for="prod-preco-min">Preço Mínimo (R$)</label>
+                  <input type="number" id="prod-preco-min" step="0.01" min="0" value="4.00">
+                </div>
+                <div class="form-group">
+                  <label for="prod-preco-max">Preço Máximo (R$)</label>
+                  <input type="number" id="prod-preco-max" step="0.01" min="0" value="7.00">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="prod-estoque-atual">Quantidade em Estoque</label>
+                  <input type="number" id="prod-estoque-atual" min="0" value="20">
+                </div>
+                <div class="form-group">
+                  <label for="prod-estoque-minimo">Estoque Mínimo (Alerta) *</label>
+                  <input type="number" id="prod-estoque-minimo" min="1" value="15" required>
+                </div>
+                <div class="form-group">
+                  <label for="prod-lote">Nº do Lote</label>
+                  <input type="text" id="prod-lote" placeholder="Ex: 546320">
+                </div>
+              </div>
+
+              <div class="form-actions-bar">
+                <button type="button" class="btn btn-secondary" id="btn-cancelar-edicao" style="display: none;">Cancelar Edição</button>
+                <button type="submit" class="btn btn-primary" id="btn-salvar-produto">💾 Confirmar e Salvar</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Tabela de Produtos Cadastrados (com busca e ações de editar/excluir) -->
+          <div class="cadastro-list-container card-panel">
+            <h3>Catálogo de Produtos Cadastrados</h3>
+            <div class="filter-toolbar">
+              <input type="text" id="catalogo-busca-input" placeholder="Buscar por código ou nome..." class="input-search">
+            </div>
+            <div class="table-responsive small-table">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Cód</th>
+                    <th>Produto</th>
+                    <th>Preço Venda</th>
+                    <th>Estoque</th>
+                    <th>Mín</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="catalogo-produtos-corpo"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- 5. ABA: ENTRADAS E SAÍDAS DE ESTOQUE -->
+      <!-- ============================================== -->
+      <section id="view-movimentacoes" class="app-view">
+        <div class="view-header-bar">
+          <div>
+            <h1 class="page-title">Movimentação de Estoque (Entradas & Saídas)</h1>
+            <p class="page-subtitle">Registro detalhado de histórico de perdas, descartes, entradas avulsas e vendas (RF 04)</p>
+          </div>
+          <button class="btn btn-primary" id="btn-abrir-modal-mov">+ Registrar Movimentação</button>
+        </div>
+
+        <div class="card-panel">
+          <div class="tabs-subnav">
+            <button class="subnav-tab active" data-tipo="TODOS">Todas as Movimentações</button>
+            <button class="subnav-tab" data-tipo="Saída">Saídas de Produtos</button>
+            <button class="subnav-tab" data-tipo="Entrada">Entradas de Produtos</button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table styled-table">
+              <thead>
+                <tr>
+                  <th>Data / Hora</th>
+                  <th>Tipo</th>
+                  <th>Produto</th>
+                  <th>Cód</th>
+                  <th>Quantidade</th>
+                  <th>Unid</th>
+                  <th>Preço Unit.</th>
+                  <th>Total R$</th>
+                  <th>Responsável</th>
+                  <th>Motivo / Observação</th>
+                </tr>
+              </thead>
+              <tbody id="movimentacoes-tabela-corpo"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- 6. ABA: VENDAS / CAIXA PDV BALCÃO -->
+      <!-- ============================================== -->
+      <section id="view-vendas" class="app-view">
+        <div class="view-header-bar">
+          <div>
+            <h1 class="page-title">Frente de Caixa (PDV Balcão)</h1>
+            <p class="page-subtitle">Emissão de pedidos com baixa automática instantânea no estoque (RF 07, RF 08)</p>
+          </div>
+          <span class="badge-info">Operador: <strong>Henry Sena</strong></span>
+        </div>
+
+        <div class="pdv-layout">
+          <!-- Lado Esquerdo: Seleção e Inserção de Produtos -->
+          <div class="pdv-selector card-panel">
+            <h3>Adicionar Item à Venda</h3>
+            <div class="form-group">
+              <label for="pdv-produto-select">Selecione o Produto</label>
+              <select id="pdv-produto-select" class="select-field">
+                <option value="">Escolha um item...</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="pdv-quantidade">Quantidade</label>
+                <input type="number" id="pdv-quantidade" min="0.1" step="0.1" value="1">
+              </div>
+              <div class="form-group">
+                <label for="pdv-preco-unitario">Preço Unitário (R$)</label>
+                <input type="number" id="pdv-preco-unitario" step="0.01" readonly>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Estoque Atual Disponível</label>
+              <div id="pdv-estoque-disponivel" class="stock-display">--</div>
+            </div>
+            <button class="btn btn-primary btn-block" id="pdv-btn-adicionar-item">➕ Adicionar Item</button>
+
+            <hr style="margin: 16px 0; border: none; border-top: 1px solid var(--border);">
+
+            <h4>Histórico de Vendas Recentes</h4>
+            <div class="table-responsive small-table" style="max-height: 200px;">
+              <table class="data-table">
+                <thead>
+                  <tr><th>Cód Venda</th><th>Total</th><th>Pagamento</th><th>Ação</th></tr>
+                </thead>
+                <tbody id="pdv-historico-corpo"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Lado Direito: Carrinho e Fechamento da Venda -->
+          <div class="pdv-cart card-panel">
+            <div class="cart-header">
+              <h3>Itens da Venda Atual</h3>
+              <button class="btn btn-secondary btn-sm" id="pdv-btn-limpar-carrinho">Limpar Venda</button>
+            </div>
+
+            <div class="cart-items-table-wrapper">
+              <table class="data-table styled-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Qtd</th>
+                    <th>Valor Unit.</th>
+                    <th>Subtotal</th>
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+                <tbody id="pdv-carrinho-corpo">
+                  <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Nenhum item adicionado na venda.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="cart-checkout-box">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="pdv-desconto">Desconto (R$)</label>
+                  <input type="number" id="pdv-desconto" min="0" step="0.50" value="0.00">
+                </div>
+                <div class="form-group">
+                  <label for="pdv-forma-pagamento">Forma de Pagamento</label>
+                  <select id="pdv-forma-pagamento">
+                    <option value="Dinheiro">Dinheiro</option>
+                    <option value="Cartão Débito">Cartão de Débito</option>
+                    <option value="Cartão Crédito">Cartão de Crédito</option>
+                    <option value="PIX">PIX</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="cart-totals">
+                <div class="total-row"><span>Subtotal:</span> <strong id="pdv-total-subtotal">R$ 0,00</strong></div>
+                <div class="total-row"><span>Desconto:</span> <span id="pdv-total-desconto">R$ 0,00</span></div>
+                <div class="total-row final"><span>TOTAL A PAGAR:</span> <strong id="pdv-total-final">R$ 0,00</strong></div>
+              </div>
+
+              <button class="btn btn-success btn-lg btn-block" id="pdv-btn-finalizar-venda">✅ Finalizar Venda & Baixar Estoque</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- 7. ABA: RELATÓRIOS E AUDITORIA -->
+      <!-- ============================================== -->
+      <section id="view-relatorios" class="app-view">
+        <div class="view-header-bar">
+          <div>
+            <h1 class="page-title">Relatório de Vendas do Dia & Auditoria</h1>
+            <p class="page-subtitle">Demonstrativo consolidado dos produtos mais vendidos e faturamento (RF 12, RF 14)</p>
+          </div>
+          <div class="view-actions">
+            <button class="btn btn-secondary" id="btn-exportar-pdf">📄 Exportar PDF</button>
+            <button class="btn btn-secondary" id="btn-exportar-excel">📊 Exportar Excel</button>
+          </div>
+        </div>
+
+        <div class="card-panel">
+          <div class="relatorio-top-cards">
+            <div class="rel-metric-card">
+              <span class="rel-metric-label">Total Arrecadado no Dia:</span>
+              <strong class="rel-metric-value" id="rel-total-faturamento">R$ 0,00</strong>
+            </div>
+            <div class="rel-metric-card">
+              <span class="rel-metric-label">Total de Vendas Realizadas:</span>
+              <strong class="rel-metric-value" id="rel-total-transacoes">0</strong>
+            </div>
+            <div class="rel-metric-card">
+              <span class="rel-metric-label">Média por Transação:</span>
+              <strong class="rel-metric-value" id="rel-ticket-medio">R$ 0,00</strong>
+            </div>
+          </div>
+
+          <h3 style="margin-top: 20px; margin-bottom: 12px;">Ranking Crescente / Produtos Vendidos no Dia</h3>
+          <div class="table-responsive">
+            <table class="data-table styled-table">
+              <thead>
+                <tr>
+                  <th>Posição</th>
+                  <th>Produto</th>
+                  <th>Valor Unitário</th>
+                  <th>Quantidade Vendida</th>
+                  <th>Total Faturado (R$)</th>
+                </tr>
+              </thead>
+              <tbody id="relatorio-vendas-tabela"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================== -->
+      <!-- 8. ABA: CONFIGURAÇÕES E 9. AJUDA -->
+      <!-- ============================================== -->
+      <section id="view-configuracoes" class="app-view">
+        <div class="view-header-bar">
+          <h1 class="page-title">Configurações do Sistema</h1>
+        </div>
+        <div class="card-panel">
+          <h3>Parâmetros da Padaria Nova York</h3>
+          <p class="text-muted">Configurações de alerta e perfis de usuário do sistema.</p>
+          <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 12px; max-width: 500px;">
+            <label><strong>Nome do Estabelecimento:</strong> Padaria Nova York</label>
+            <label><strong>Endereço:</strong> São Caetano do Sul - SP</label>
+            <label><strong>Regra de Notificação de Alerta:</strong> Disparar quando Estoque Atual &le; Estoque Mínimo</label>
+            <label><strong>Modo de Operação:</strong> Local com Banco em Memória Simulada (MySQL Ready)</label>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-ajuda" class="app-view">
+        <div class="view-header-bar">
+          <h1 class="page-title">Ajuda & Documentação do Projeto</h1>
+        </div>
+        <div class="card-panel">
+          <h3>GestFast - Solução de Panificadoras e Comércios</h3>
+          <p>Projeto Integrado Multidisciplinar (PIM / PE) • Universidade Municipal de São Caetano do Sul (USCS)</p>
+          <div style="margin-top: 14px; line-height: 1.6;">
+            <p><strong>Autores do Projeto:</strong> Henry Sena, Nicolas Viana, João Nabeshima, Lucas Nunes e Daniel Farias.</p>
+            <p><strong>Objetivo:</strong> Otimizar o controle de estoque, conferência física de produtos e agilizar o atendimento no balcão da Padaria Nova York.</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Modal de Nova Requisição -->
+  <div id="modal-requisicao" class="modal-backdrop" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Nova Requisição para Fornecedor</h3>
+        <button class="modal-close" id="btn-fechar-modal-req">&times;</button>
+      </div>
+      <form id="form-requisicao-modal">
+        <div class="form-group">
+          <label for="modal-req-produto">Produto *</label>
+          <select id="modal-req-produto" required></select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="modal-req-quantidade">Quantidade *</label>
+            <input type="number" id="modal-req-quantidade" min="1" value="20" required>
+          </div>
+          <div class="form-group">
+            <label for="modal-req-unidade">Unidade</label>
+            <input type="text" id="modal-req-unidade" value="Pacote" readonly>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="modal-req-fornecedor">Empresa Fornecedora *</label>
+          <input type="text" id="modal-req-fornecedor" value="Empresa Pão e Açúcar Dist." required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="modal-req-valor-unit">Preço Unitário (R$)</label>
+            <input type="number" id="modal-req-valor-unit" step="0.01" value="12.50" required>
+          </div>
+          <div class="form-group">
+            <label for="modal-req-entrega">Previsão Entrega</label>
+            <input type="date" id="modal-req-entrega" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="modal-req-obs">Observações do Pedido</label>
+          <textarea id="modal-req-obs" rows="2" placeholder="Informações de entrega ou urgência..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancelar-modal-req">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Requisição</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal de Registrar Movimentação Avulsa (Entrada / Saída) -->
+  <div id="modal-movimentacao" class="modal-backdrop" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Registrar Movimentação de Estoque</h3>
+        <button class="modal-close" id="btn-fechar-modal-mov">&times;</button>
+      </div>
+      <form id="form-movimentacao-modal">
+        <div class="form-group">
+          <label for="modal-mov-tipo">Tipo de Movimentação *</label>
+          <select id="modal-mov-tipo" required>
+            <option value="Entrada">Entrada (Compra avulsa / Devolução)</option>
+            <option value="Saída">Saída (Descarte / Consumo interno / Avaria)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="modal-mov-produto">Produto *</label>
+          <select id="modal-mov-produto" required></select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="modal-mov-quantidade">Quantidade *</label>
+            <input type="number" id="modal-mov-quantidade" min="0.1" step="0.1" value="1" required>
+          </div>
+          <div class="form-group">
+            <label for="modal-mov-unidade">Unidade</label>
+            <input type="text" id="modal-mov-unidade" value="UN" readonly>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="modal-mov-obs">Motivo / Justificativa</label>
+          <input type="text" id="modal-mov-obs" placeholder="Ex: Produto venceu na prateleira" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="btn-cancelar-modal-mov">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Registrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+  <script src="app.js"></script>
+</body>
+</html>

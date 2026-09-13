@@ -47,12 +47,23 @@ class MockDatabase {
       { id_categoria: 5, nome_categoria: 'Frios & Derivados', descricao: 'Queijos, presuntos, manteigas e frios fatiados' }
     ];
 
+    this.fornecedores = [
+      'Empresa Pão e Açúcar Dist.',
+      'Moinho Paulista de Trigo',
+      'Granja Santo André Ltda',
+      'Laticínios ABC',
+      'Confeitaria Doce Arte',
+      'Panificadora Central e Distribuição',
+      'Café Pilão Distribuição Direta',
+      'Distribuidora de Embalagens São Caetano'
+    ];
+
     this.produtos = [
       {
         id_produto: 1,
         codigo_barras: '78910001',
         nome_produto: 'Pão de Queijo',
-        descricao: 'Pão de queijo tradicional de Minas 50g',
+        descricao: 'Pão de queijo tradicional de Minas 50g assado na hora',
         unidade: 'UN',
         peso: '50g',
         preco_custo: 1.20,
@@ -64,13 +75,14 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 1,
         lote: '546320',
-        validade: '2026-09-15'
+        validade: '2026-09-15',
+        imagem: 'assets/pao.png'
       },
       {
         id_produto: 2,
         codigo_barras: '78910002',
         nome_produto: 'Café Pilão 320g',
-        descricao: 'Café torrado e moído tradicional 320g',
+        descricao: 'Café torrado e moído tradicional 320g com notas intensas',
         unidade: 'Pacote',
         peso: '320g',
         preco_custo: 12.50,
@@ -82,7 +94,8 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 2,
         lote: '548417',
-        validade: '2026-12-20'
+        validade: '2026-12-20',
+        imagem: 'assets/cafe.png'
       },
       {
         id_produto: 3,
@@ -100,13 +113,14 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 4,
         lote: '546328',
-        validade: '2026-09-12'
+        validade: '2026-09-12',
+        imagem: 'assets/bolo.png'
       },
       {
         id_produto: 4,
         codigo_barras: '78910004',
         nome_produto: 'Pão Francês',
-        descricao: 'Pão francês artesanal assado de hora em hora',
+        descricao: 'Pão francês artesanal crocante assado de hora em hora',
         unidade: 'KG',
         peso: '1000g',
         preco_custo: 5.50,
@@ -118,13 +132,14 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 1,
         lote: '545846',
-        validade: '2026-09-10'
+        validade: '2026-09-10',
+        imagem: 'assets/pao_frances.png'
       },
       {
         id_produto: 5,
         codigo_barras: '78910005',
         nome_produto: 'Açúcar Cristal 1kg',
-        descricao: 'Açúcar cristal refinado 1kg',
+        descricao: 'Açúcar cristal refinado 1kg para receitas e café',
         unidade: 'Pacote',
         peso: '1000g',
         preco_custo: 3.20,
@@ -136,13 +151,14 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 3,
         lote: '546326',
-        validade: '2027-01-20'
+        validade: '2027-01-20',
+        imagem: 'assets/acucar.png'
       },
       {
         id_produto: 6,
         codigo_barras: '78910006',
         nome_produto: 'Farinha de Trigo Especial 1kg',
-        descricao: 'Farinha de trigo tipo 1 para panificação profissional',
+        descricao: 'Farinha de trigo tipo 1 para panificação profissional de alto padrão',
         unidade: 'Pacote',
         peso: '1000g',
         preco_custo: 4.10,
@@ -154,13 +170,14 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 3,
         lote: '547890',
-        validade: '2026-11-30'
+        validade: '2026-11-30',
+        imagem: 'assets/farinha.png'
       },
       {
         id_produto: 7,
         codigo_barras: '78910007',
         nome_produto: 'Queijo Mussarela Fatiado',
-        descricao: 'Queijo mussarela fatiado fresco para lanches',
+        descricao: 'Queijo mussarela fatiado fresco para lanches e salgados',
         unidade: 'KG',
         peso: '1000g',
         preco_custo: 32.00,
@@ -172,7 +189,8 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 5,
         lote: '549012',
-        validade: '2026-09-20'
+        validade: '2026-09-20',
+        imagem: 'assets/queijo.png'
       },
       {
         id_produto: 8,
@@ -190,13 +208,14 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 2,
         lote: '548900',
-        validade: '2026-10-15'
+        validade: '2026-10-15',
+        imagem: 'assets/leite.png'
       },
       {
         id_produto: 9,
         codigo_barras: '78910009',
         nome_produto: 'Ovos Brancos Granjeiros (Dúzia)',
-        descricao: 'Dúzia de ovos brancos selecionados tipo grande',
+        descricao: 'Dúzia de ovos brancos selecionados tipo grande de alta qualidade',
         unidade: 'DZ',
         peso: '650g',
         preco_custo: 8.50,
@@ -208,13 +227,14 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 3,
         lote: '549111',
-        validade: '2026-09-25'
+        validade: '2026-09-25',
+        imagem: 'assets/ovos.png'
       },
       {
         id_produto: 10,
         codigo_barras: '78910010',
         nome_produto: 'Suco de Uva Integral 500ml',
-        descricao: 'Suco de uva tinto 100% natural sem adição de açúcares',
+        descricao: 'Suco de uva tinto 100% natural sem adição de açúcares ou conservantes',
         unidade: 'UN',
         peso: '500ml',
         preco_custo: 4.80,
@@ -226,13 +246,14 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 2,
         lote: '578412',
-        validade: '2026-12-30'
+        validade: '2026-12-30',
+        imagem: 'assets/suco.png'
       },
       {
         id_produto: 11,
         codigo_barras: '78910011',
         nome_produto: 'Pão Doce Tradicional',
-        descricao: 'Pão doce fofinho com creme de baunilha e coco',
+        descricao: 'Pão doce fofinho com creme de baunilha artesanal e coco ralado',
         unidade: 'UN',
         peso: '80g',
         preco_custo: 1.10,
@@ -244,13 +265,14 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 1,
         lote: '548999',
-        validade: '2026-09-11'
+        validade: '2026-09-11',
+        imagem: 'assets/pao_doce.png'
       },
       {
         id_produto: 12,
         codigo_barras: '78910012',
         nome_produto: 'Bala Toffee Mastigável',
-        descricao: 'Balas caramelizadas artesanais sortidas',
+        descricao: 'Balas caramelizadas artesanais sortidas tradicionais da bomboniere',
         unidade: 'UN',
         peso: '10g',
         preco_custo: 0.10,
@@ -262,7 +284,8 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: 4,
         lote: '546111',
-        validade: '2027-04-10'
+        validade: '2027-04-10',
+        imagem: 'assets/bala.png'
       }
     ];
 
@@ -282,7 +305,7 @@ class MockDatabase {
         data_pedido: '2026-09-06',
         previsao_entrega: '2026-09-12',
         endereco_entrega: 'Padaria Nova York - Rua Visconde de Inhaúma, 450',
-        observacao: 'Pedido prioritário devido ao alto consumo matinal.'
+        observacao: 'Pedido prioritário de café moído para atender o fluxo matinal da padaria.'
       },
       {
         id_requisicao: 2,
@@ -299,7 +322,7 @@ class MockDatabase {
         data_pedido: '2026-09-07',
         previsao_entrega: '2026-09-11',
         endereco_entrega: 'Padrão',
-        observacao: 'Reposição para produção de massas e confeitaria.'
+        observacao: 'Reposição semanal de ovos para a produção contínua da confeitaria.'
       },
       {
         id_requisicao: 3,
@@ -316,7 +339,7 @@ class MockDatabase {
         data_pedido: '2026-09-07',
         previsao_entrega: '2026-09-13',
         endereco_entrega: 'Padrão',
-        observacao: 'Farinha com teor protéico ideal para baguetes.'
+        observacao: 'Farinha com teor protéico ideal para a fornada diária de baguetes.'
       },
       {
         id_requisicao: 4,
@@ -333,7 +356,7 @@ class MockDatabase {
         data_pedido: '2026-09-08',
         previsao_entrega: '2026-09-10',
         endereco_entrega: 'Padrão',
-        observacao: 'Estoque atual em 4 unidades.'
+        observacao: 'Estoque atingiu nível crítico de 4 fatias no balcão refrigerado.'
       },
       {
         id_requisicao: 5,
@@ -350,7 +373,25 @@ class MockDatabase {
         data_pedido: '2026-09-04',
         previsao_entrega: '2026-09-05',
         endereco_entrega: 'Padrão',
-        observacao: 'Entregue com pontualidade e conferido.'
+        observacao: 'Entregue com pontualidade e conferido integralmente pelo estoquista.'
+      },
+      {
+        id_requisicao: 6,
+        codigo_pedido: 'REQ-9665',
+        fornecedor: 'Distribuidora de Embalagens São Caetano',
+        produto_nome: 'Copos Descartáveis 200ml (Cento)',
+        id_produto: null,
+        quantidade_pedida: 20,
+        quantidade_atendida: 0,
+        unidade: 'Pacote',
+        valor_unitario: 12.00,
+        valor_total: 240.00,
+        situacao: 'Cancelado',
+        data_pedido: '2026-09-02',
+        previsao_entrega: '2026-09-05',
+        endereco_entrega: 'Padrão',
+        observacao: 'Pedido cancelado após conferência do estoque remanescente no almoxarifado.',
+        justificativa_cancelamento: 'Cancelamento efetuado após a verificação física constatar saldo remanescente suficiente para mais 3 semanas no depósito.'
       }
     ];
 
@@ -406,7 +447,7 @@ class MockDatabase {
       {
         id_venda: 1,
         codigo_venda: 'VENDA-1001',
-        data_venda: '2026-09-08 10:15',
+        data_venda: '2026-09-12 10:15',
         valor_total: 90.00,
         desconto: 0.00,
         forma_pagamento: 'Cartão Débito',
@@ -420,7 +461,7 @@ class MockDatabase {
       {
         id_venda: 2,
         codigo_venda: 'VENDA-1002',
-        data_venda: '2026-09-08 11:40',
+        data_venda: '2026-09-12 11:40',
         valor_total: 118.40,
         desconto: 0.00,
         forma_pagamento: 'Dinheiro',
@@ -434,7 +475,7 @@ class MockDatabase {
       {
         id_venda: 3,
         codigo_venda: 'VENDA-1003',
-        data_venda: '2026-09-08 13:10',
+        data_venda: '2026-09-12 13:10',
         valor_total: 120.00,
         desconto: 0.00,
         forma_pagamento: 'PIX',
@@ -448,7 +489,7 @@ class MockDatabase {
       {
         id_venda: 4,
         codigo_venda: 'VENDA-1004',
-        data_venda: '2026-09-08 14:35',
+        data_venda: '2026-09-12 14:35',
         valor_total: 450.00,
         desconto: 0.00,
         forma_pagamento: 'Cartão Crédito',
@@ -462,7 +503,7 @@ class MockDatabase {
       {
         id_venda: 5,
         codigo_venda: 'VENDA-1005',
-        data_venda: '2026-09-08 15:50',
+        data_venda: '2026-09-12 15:05',
         valor_total: 110.00,
         desconto: 0.00,
         forma_pagamento: 'Dinheiro',
@@ -476,7 +517,7 @@ class MockDatabase {
       {
         id_venda: 6,
         codigo_venda: 'VENDA-1006',
-        data_venda: '2026-09-08 17:05',
+        data_venda: '2026-09-12 15:25',
         valor_total: 96.00,
         desconto: 0.00,
         forma_pagamento: 'PIX',
@@ -492,9 +533,9 @@ class MockDatabase {
     this.conferencias = [
       {
         id_conferencia: 1,
-        data_conferencia: '2026-09-01 14:00',
+        data_conferencia: '2026-09-10 14:00',
         responsavel: 'Henry Sena',
-        observacao: 'Conferência quinzenal de estoque físico de farinhas e laticínios.',
+        observacao: 'Conferência de estoque físico e ajuste de saldos.',
         itens: [
           { id_produto: 5, nome_produto: 'Açúcar Cristal 1kg', unidade: 'Pacote', lote: '546326', quantidade_sistema: 12, quantidade_fisica: 12, divergencia: 0 },
           { id_produto: 2, nome_produto: 'Café Pilão 320g', unidade: 'Pacote', lote: '548417', quantidade_sistema: 25, quantidade_fisica: 25, divergencia: 0 },
@@ -505,7 +546,7 @@ class MockDatabase {
     ];
   }
 
-  // Métodos de Produtos
+  // Métodos de Produtos (CRUD)
   getProducts(query, categoriaId) {
     let list = this.produtos.filter(p => p.status !== 'Inativo');
     if (categoriaId) {
@@ -533,6 +574,12 @@ class MockDatabase {
     const precoVenda = Number(data.preco_venda);
     if (precoVenda <= 0) {
       throw new Error('O preço de venda deve ser maior que zero.');
+    }
+
+    if (data.descricao && data.descricao.trim().length > 0) {
+      if (data.descricao.trim().length < 10 || data.descricao.trim().length > 5000) {
+        throw new Error('A descrição do produto deve conter entre 10 e 5000 caracteres.');
+      }
     }
 
     if (data.id_produto) {
@@ -570,7 +617,8 @@ class MockDatabase {
         status: 'Ativo',
         id_categoria: Number(data.id_categoria) || 1,
         lote: data.lote || `L-${Math.floor(100000 + Math.random() * 900000)}`,
-        validade: data.validade || '2026-12-31'
+        validade: data.validade || '2026-12-31',
+        imagem: data.imagem || 'assets/pao.png'
       };
       this.produtos.push(newProd);
       return newProd;
@@ -584,7 +632,6 @@ class MockDatabase {
     return true;
   }
 
-  // Alertas Críticos (RF 11)
   getAlertasCriticos() {
     return this.produtos
       .filter(p => p.status === 'Ativo' && Number(p.quantidade_estoque) <= Number(p.estoque_minimo))
@@ -596,11 +643,10 @@ class MockDatabase {
         estoque_minimo: p.estoque_minimo,
         lote: p.lote,
         categoria_id: p.id_categoria,
-        mensagem: `Atenção: ${p.nome_produto} atingiu o estoque mínimo (${p.quantidade_estoque} ${p.unidade} disponíveis, mín: ${p.estoque_minimo})`
+        mensagem: `${p.nome_produto} atingiu o estoque mínimo (${p.quantidade_estoque} ${p.unidade} disponíveis, mín: ${p.estoque_minimo})`
       }));
   }
 
-  // Dashboard Aggregates (RF 10)
   getDashboardData() {
     const totalProdutos = this.produtos.filter(p => p.status === 'Ativo').length;
     const produtosEmAlerta = this.getAlertasCriticos();
@@ -645,13 +691,20 @@ class MockDatabase {
     };
   }
 
-  // Requisições (RF 05)
+  // Requisições
   createRequisicao(data) {
+    if (!data.fornecedor) throw new Error('Selecione um fornecedor da lista.');
+    if (data.observacao && data.observacao.trim().length > 0) {
+      if (data.observacao.trim().length < 10 || data.observacao.trim().length > 5000) {
+        throw new Error('A observação da requisição deve ter entre 10 e 5000 caracteres.');
+      }
+    }
+
     const newId = this.requisicoes.length ? Math.max(...this.requisicoes.map(r => r.id_requisicao)) + 1 : 1;
     const req = {
       id_requisicao: newId,
       codigo_pedido: `REQ-${9660 + newId}`,
-      fornecedor: data.fornecedor || 'Fornecedor Padrão',
+      fornecedor: data.fornecedor,
       produto_nome: data.produto_nome,
       id_produto: data.id_produto ? Number(data.id_produto) : null,
       quantidade_pedida: Number(data.quantidade_pedida) || 1,
@@ -661,7 +714,7 @@ class MockDatabase {
       valor_total: (Number(data.quantidade_pedida) || 1) * (Number(data.valor_unitario) || 0),
       situacao: 'Em Aberto',
       data_pedido: new Date().toISOString().slice(0, 10),
-      previsao_entrega: data.previsao_entrega || '2026-09-15',
+      previsao_entrega: data.previsao_entrega || '2026-09-18',
       endereco_entrega: data.endereco_entrega || 'Padrão - Padaria Nova York',
       observacao: data.observacao || ''
     };
@@ -672,10 +725,17 @@ class MockDatabase {
   updateRequisicaoStatus(id, situacao, justificativa = '') {
     const req = this.requisicoes.find(r => r.id_requisicao === Number(id));
     if (!req) throw new Error('Requisição não encontrada.');
-    req.situacao = situacao;
-    if (justificativa) req.justificativa_cancelamento = justificativa;
 
-    // Se a requisição for marcada como Finalizada, dá entrada no estoque automaticamente
+    if (situacao === 'Cancelado') {
+      const justTrim = (justificativa || '').trim();
+      if (justTrim.length < 10 || justTrim.length > 5000) {
+        throw new Error('O motivo de cancelamento é obrigatório e deve ter entre 10 e 5000 caracteres.');
+      }
+      req.justificativa_cancelamento = justTrim;
+    }
+
+    req.situacao = situacao;
+
     if (situacao === 'Finalizado' && req.id_produto) {
       const prod = this.getProductById(req.id_produto);
       if (prod) {
@@ -698,14 +758,13 @@ class MockDatabase {
     return req;
   }
 
-  // Movimentações de Estoque (RF 04)
   addMovimentacao(data) {
     const newId = this.movimentacoes.length ? Math.max(...this.movimentacoes.map(m => m.id_movimentacao)) + 1 : 1;
     const now = new Date();
     const dataFormatada = `${now.toISOString().slice(0, 10)} ${now.toTimeString().slice(0, 5)}`;
     const mov = {
       id_movimentacao: newId,
-      tipo_movimentacao: data.tipo_movimentacao, // 'Entrada' ou 'Saída'
+      tipo_movimentacao: data.tipo_movimentacao,
       quantidade: Number(data.quantidade),
       data_movimentacao: dataFormatada,
       observacao: data.observacao || '',
@@ -722,13 +781,18 @@ class MockDatabase {
     return mov;
   }
 
-  // Registrar Movimentação Manual e atualizar saldo do produto
   registrarMovimentacaoEstoque(data) {
     const prod = this.getProductById(data.id_produto);
     if (!prod) throw new Error('Produto não encontrado.');
 
     const qtd = Number(data.quantidade);
     if (qtd <= 0) throw new Error('A quantidade deve ser maior que zero.');
+
+    if (data.observacao && data.observacao.trim().length > 0) {
+      if (data.observacao.trim().length < 10 || data.observacao.trim().length > 5000) {
+        throw new Error('O motivo da movimentação deve ter entre 10 e 5000 caracteres.');
+      }
+    }
 
     if (data.tipo_movimentacao === 'Saída') {
       if (prod.quantidade_estoque < qtd) {
@@ -742,7 +806,7 @@ class MockDatabase {
     return this.addMovimentacao({
       tipo_movimentacao: data.tipo_movimentacao,
       quantidade: qtd,
-      observacao: data.observacao || `Movimentação manual (${data.tipo_movimentacao})`,
+      observacao: data.observacao || `Movimentação manual registrada no sistema (${data.tipo_movimentacao})`,
       id_produto: prod.id_produto,
       produto_nome: prod.nome_produto,
       codigo_barras: prod.codigo_barras,
@@ -753,13 +817,11 @@ class MockDatabase {
     });
   }
 
-  // Vendas / PDV (RF 07, RF 08, RF 09)
   realizarVenda(data) {
     if (!data.itens || !data.itens.length) {
       throw new Error('Nenhum item inserido na venda.');
     }
 
-    // Validar estoque disponível para todos os itens primeiro (RF 08 e Cenário 7/9)
     for (const item of data.itens) {
       const prod = this.getProductById(item.id_produto);
       if (!prod) throw new Error(`Produto código #${item.id_produto} não localizado.`);
@@ -768,7 +830,6 @@ class MockDatabase {
       }
     }
 
-    // Baixa automática no estoque (RF 08)
     const itensProcessados = [];
     let subtotalGeral = 0;
 
@@ -791,11 +852,10 @@ class MockDatabase {
         subtotal: subtotal
       });
 
-      // Gera movimentação de saída
       this.addMovimentacao({
         tipo_movimentacao: 'Saída',
         quantidade: qtd,
-        observacao: `Baixa automática de venda no balcão`,
+        observacao: `Baixa automática de venda no balcão da padaria`,
         id_produto: prod.id_produto,
         produto_nome: prod.nome_produto,
         codigo_barras: prod.codigo_barras,
@@ -836,7 +896,6 @@ class MockDatabase {
     if (!venda) throw new Error('Venda não encontrada.');
     if (venda.status_venda === 'Cancelada') throw new Error('Esta venda já está cancelada.');
 
-    // Estorno automático no estoque (RF 09)
     venda.itens.forEach(item => {
       const prod = this.getProductById(item.id_produto);
       if (prod) {
@@ -844,7 +903,7 @@ class MockDatabase {
         this.addMovimentacao({
           tipo_movimentacao: 'Entrada',
           quantidade: item.quantidade,
-          observacao: `Estorno de estoque por cancelamento da ${venda.codigo_venda}`,
+          observacao: `Estorno de estoque por cancelamento da venda ${venda.codigo_venda}`,
           id_produto: prod.id_produto,
           produto_nome: prod.nome_produto,
           codigo_barras: prod.codigo_barras,
@@ -861,7 +920,6 @@ class MockDatabase {
     return venda;
   }
 
-  // Conferência de Inventário Físico (RF 06)
   salvarConferencia(responsavel, itensConferidos, observacao = '') {
     const now = new Date();
     const dataFormatada = `${now.toISOString().slice(0, 10)} ${now.toTimeString().slice(0, 5)}`;
@@ -873,7 +931,6 @@ class MockDatabase {
       const qtdSistema = prod ? Number(prod.quantidade_estoque) : 0;
       const divergencia = qtdFisica - qtdSistema;
 
-      // Se atualizar o estoque real conforme contagem física
       if (prod && item.ajustarEstoque) {
         prod.quantidade_estoque = qtdFisica;
       }
@@ -901,9 +958,7 @@ class MockDatabase {
     return conferencia;
   }
 
-  // Relatório de Vendas (RF 12)
   getRelatorioVendas() {
-    // Agrupa todos os itens vendidos no dia
     const produtosVendidosMap = {};
     let totalFaturamento = 0;
 

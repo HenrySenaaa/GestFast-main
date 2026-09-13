@@ -60,15 +60,21 @@ const server = http.createServer(async (req, res) => {
   try {
     // 1. Dashboard & Alertas
     if (pathname === '/api/dashboard' && method === 'GET') {
-      return sendJson(res, 200, { success: true, data: db.getDashboardData() });
+      const startTime = Date.now();
+      const dashData = db.getDashboardData();
+      const latencyMs = Date.now() - startTime;
+      return sendJson(res, 200, { success: true, data: dashData, latencyMs });
     }
     if (pathname === '/api/alerts' && method === 'GET') {
       return sendJson(res, 200, { success: true, alerts: db.getAlertasCriticos() });
     }
 
-    // 2. Categorias
+    // 2. Categorias e Fornecedores
     if (pathname === '/api/categories' && method === 'GET') {
       return sendJson(res, 200, { success: true, categories: db.categorias });
+    }
+    if (pathname === '/api/suppliers' && method === 'GET') {
+      return sendJson(res, 200, { success: true, suppliers: db.fornecedores });
     }
 
     // 3. Produtos (CRUD)
@@ -97,12 +103,18 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/products/') && method === 'DELETE') {
       const id = pathname.split('/')[3];
       db.deleteProduct(id);
-      return sendJson(res, 200, { success: true, message: 'Produto inativado/removido do catálogo ativo com sucesso!' });
+      return sendJson(res, 200, { success: true, message: 'Produto inativado do catálogo com sucesso!' });
     }
 
     // 4. Requisições de Fornecedores
     if (pathname === '/api/requisitions' && method === 'GET') {
       return sendJson(res, 200, { success: true, requisicoes: db.requisicoes });
+    }
+    if (pathname.startsWith('/api/requisitions/') && pathname.split('/').length === 4 && method === 'GET') {
+      const id = pathname.split('/')[3];
+      const reqFound = db.requisicoes.find(r => r.id_requisicao === Number(id));
+      if (!reqFound) return sendJson(res, 404, { success: false, error: 'Requisição não encontrada' });
+      return sendJson(res, 200, { success: true, requisicao: reqFound });
     }
     if (pathname === '/api/requisitions' && method === 'POST') {
       const body = await parseBody(req);

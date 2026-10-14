@@ -1,0 +1,25 @@
+{
+  "name": "gestfast",
+  "version": "1.0.0",
+  "description": "GestFast ERP - controle de estoque da Padaria Nova York",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HenrySenaaa/GestFast-main.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/HenrySenaaa/GestFast-main/issues"
+  },
+  "homepage": "https://github.com/HenrySenaaa/GestFast-main#readme",
+  "dependencies": {
+    "dotenv": "^18.0.7",
+    "mysql2": "^3.24.6"
+  }
+}

@@ -1,573 +1,79 @@
-// db.js - Banco de Dados Simulado em Memória para o ERP GestFast
-function normalize(str) {
-  return (str || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+// db.js - Camada de acesso ao banco MySQL do ERP GestFast
+// Mantém os mesmos métodos e o mesmo formato de retorno do antigo banco em memória,
+// para o frontend (public/) continuar funcionando sem alterações.
+const { pool, transacao } = require('./database/conexao');
+
+// Enquanto não há login (etapa de nov/2026), o usuário da operação continua fixo.
+const USUARIO_OPERADOR = 2;  // Henry Sena
+const USUARIO_GERENTE = 1;   // Francisco
+
+const FMT_DATA_HORA = '%Y-%m-%d %H:%i';
+
+function textoValido(texto, min = 10, max = 5000) {
+  const t = (texto || '').trim();
+  return t.length >= min && t.length <= max;
 }
 
-class MockDatabase {
-  constructor() {
-    this.init();
+// Gera um código temporário único (até 20 caracteres) para colunas UNIQUE NOT NULL
+// que só ganham o código definitivo depois que o INSERT devolve o id.
+function codigoTemporario() {
+  return `T${Date.now()}${Math.floor(Math.random() * 10000)}`;
+}
+
+const SQL_REQUISICAO = `
+  SELECT r.id_requisicao, r.codigo_pedido, f.nome AS fornecedor, r.produto_nome, r.id_produto,
+         r.quantidade_pedida, r.quantidade_atendida, r.unidade, r.valor_unitario, r.valor_total,
+         r.situacao, r.data_pedido, r.previsao_entrega, r.endereco_entrega, r.observacao,
+         r.justificativa_cancelamento
+    FROM requisicoes r
+    JOIN fornecedores f ON f.id_fornecedor = r.id_fornecedor`;
+
+const SQL_MOVIMENTACAO = `
+  SELECT m.id_movimentacao, m.tipo_movimentacao, m.quantidade,
+         DATE_FORMAT(m.data_movimentacao, '${FMT_DATA_HORA}') AS data_movimentacao,
+         m.observacao, m.id_produto, p.nome_produto AS produto_nome, p.codigo_barras, p.unidade,
+         m.valor_unitario, m.valor_total, m.id_usuario, u.nome AS usuario_nome
+    FROM movimentacoes m
+    JOIN produtos p ON p.id_produto = m.id_produto
+    JOIN usuarios u ON u.id_usuario = m.id_usuario`;
+
+class MySQLDatabase {
+  // Categorias e Fornecedores
+  async getCategorias() {
+    const [rows] = await pool.query('SELECT id_categoria, nome_categoria, descricao FROM categorias ORDER BY id_categoria');
+    return rows;
   }
 
-  init() {
-    this.perfis = [
-      { id_perfil: 1, nome_perfil: 'Administrador' },
-      { id_perfil: 2, nome_perfil: 'BackOffice' },
-      { id_perfil: 3, nome_perfil: 'Funcionario' }
-    ];
-
-    this.usuarios = [
-      {
-        id_usuario: 1,
-        nome: 'Francisco',
-        email: 'proprietario@padarianovayork.com',
-        cargo: 'Proprietário',
-        status: 'Ativo',
-        data_criacao: '2026-01-10',
-        id_perfil: 1
-      },
-      {
-        id_usuario: 2,
-        nome: 'Henry Sena',
-        email: 'henry@padarianovayork.com',
-        cargo: 'Atendente / Operador de Caixa',
-        status: 'Ativo',
-        data_criacao: '2026-02-01',
-        id_perfil: 3
-      }
-    ];
-
-    this.categorias = [
-      { id_categoria: 1, nome_categoria: 'Pães', descricao: 'Pães artesanais, franceses, baguetes e doces' },
-      { id_categoria: 2, nome_categoria: 'Bebidas & Cafés', descricao: 'Cafés, sucos, refrigerantes e laticínios' },
-      { id_categoria: 3, nome_categoria: 'Mercearia & Insumos', descricao: 'Farinhas, açúcares, fermentos e ingredientes' },
-      { id_categoria: 4, nome_categoria: 'Confeitaria & Bolos', descricao: 'Bolos, doces, tortas e sobremesas' },
-      { id_categoria: 5, nome_categoria: 'Frios & Derivados', descricao: 'Queijos, presuntos, manteigas e frios fatiados' }
-    ];
-
-    this.fornecedores = [
-      'Empresa Pão e Açúcar Dist.',
-      'Moinho Paulista de Trigo',
-      'Granja Santo André Ltda',
-      'Laticínios ABC',
-      'Confeitaria Doce Arte',
-      'Panificadora Central e Distribuição',
-      'Café Pilão Distribuição Direta',
-      'Distribuidora de Embalagens São Caetano'
-    ];
-
-    this.produtos = [
-      {
-        id_produto: 1,
-        codigo_barras: '78910001',
-        nome_produto: 'Pão de Queijo',
-        descricao: 'Pão de queijo tradicional de Minas 50g assado na hora',
-        unidade: 'UN',
-        peso: '50g',
-        preco_custo: 1.20,
-        preco_venda: 3.50,
-        preco_min: 2.50,
-        preco_max: 5.00,
-        quantidade_estoque: 10,
-        estoque_minimo: 30,
-        status: 'Ativo',
-        id_categoria: 1,
-        lote: '546320',
-        validade: '2026-09-15',
-        imagem: 'assets/pao.png'
-      },
-      {
-        id_produto: 2,
-        codigo_barras: '78910002',
-        nome_produto: 'Café Pilão 320g',
-        descricao: 'Café torrado e moído tradicional 320g com notas intensas',
-        unidade: 'Pacote',
-        peso: '320g',
-        preco_custo: 12.50,
-        preco_venda: 18.90,
-        preco_min: 15.00,
-        preco_max: 22.00,
-        quantidade_estoque: 20,
-        estoque_minimo: 25,
-        status: 'Ativo',
-        id_categoria: 2,
-        lote: '548417',
-        validade: '2026-12-20',
-        imagem: 'assets/cafe.png'
-      },
-      {
-        id_produto: 3,
-        codigo_barras: '78910003',
-        nome_produto: 'Bolo de Cenoura',
-        descricao: 'Bolo caseiro de cenoura com calda generosa de chocolate',
-        unidade: 'Fatia',
-        peso: '120g',
-        preco_custo: 4.50,
-        preco_venda: 12.00,
-        preco_min: 9.00,
-        preco_max: 16.00,
-        quantidade_estoque: 4,
-        estoque_minimo: 12,
-        status: 'Ativo',
-        id_categoria: 4,
-        lote: '546328',
-        validade: '2026-09-12',
-        imagem: 'assets/bolo.png'
-      },
-      {
-        id_produto: 4,
-        codigo_barras: '78910004',
-        nome_produto: 'Pão Francês',
-        descricao: 'Pão francês artesanal crocante assado de hora em hora',
-        unidade: 'KG',
-        peso: '1000g',
-        preco_custo: 5.50,
-        preco_venda: 16.90,
-        preco_min: 14.00,
-        preco_max: 19.90,
-        quantidade_estoque: 70,
-        estoque_minimo: 30,
-        status: 'Ativo',
-        id_categoria: 1,
-        lote: '545846',
-        validade: '2026-09-10',
-        imagem: 'assets/pao_frances.png'
-      },
-      {
-        id_produto: 5,
-        codigo_barras: '78910005',
-        nome_produto: 'Açúcar Cristal 1kg',
-        descricao: 'Açúcar cristal refinado 1kg para receitas e café',
-        unidade: 'Pacote',
-        peso: '1000g',
-        preco_custo: 3.20,
-        preco_venda: 5.50,
-        preco_min: 4.00,
-        preco_max: 7.00,
-        quantidade_estoque: 12,
-        estoque_minimo: 20,
-        status: 'Ativo',
-        id_categoria: 3,
-        lote: '546326',
-        validade: '2027-01-20',
-        imagem: 'assets/acucar.png'
-      },
-      {
-        id_produto: 6,
-        codigo_barras: '78910006',
-        nome_produto: 'Farinha de Trigo Especial 1kg',
-        descricao: 'Farinha de trigo tipo 1 para panificação profissional de alto padrão',
-        unidade: 'Pacote',
-        peso: '1000g',
-        preco_custo: 4.10,
-        preco_venda: 6.80,
-        preco_min: 5.00,
-        preco_max: 8.50,
-        quantidade_estoque: 18,
-        estoque_minimo: 40,
-        status: 'Ativo',
-        id_categoria: 3,
-        lote: '547890',
-        validade: '2026-11-30',
-        imagem: 'assets/farinha.png'
-      },
-      {
-        id_produto: 7,
-        codigo_barras: '78910007',
-        nome_produto: 'Queijo Mussarela Fatiado',
-        descricao: 'Queijo mussarela fatiado fresco para lanches e salgados',
-        unidade: 'KG',
-        peso: '1000g',
-        preco_custo: 32.00,
-        preco_venda: 48.00,
-        preco_min: 40.00,
-        preco_max: 56.00,
-        quantidade_estoque: 6,
-        estoque_minimo: 15,
-        status: 'Ativo',
-        id_categoria: 5,
-        lote: '549012',
-        validade: '2026-09-20',
-        imagem: 'assets/queijo.png'
-      },
-      {
-        id_produto: 8,
-        codigo_barras: '78910008',
-        nome_produto: 'Leite Integral 1L',
-        descricao: 'Leite UHT integral pasteurizado 1L',
-        unidade: 'UN',
-        peso: '1000ml',
-        preco_custo: 3.80,
-        preco_venda: 6.00,
-        preco_min: 4.90,
-        preco_max: 7.50,
-        quantidade_estoque: 80,
-        estoque_minimo: 30,
-        status: 'Ativo',
-        id_categoria: 2,
-        lote: '548900',
-        validade: '2026-10-15',
-        imagem: 'assets/leite.png'
-      },
-      {
-        id_produto: 9,
-        codigo_barras: '78910009',
-        nome_produto: 'Ovos Brancos Granjeiros (Dúzia)',
-        descricao: 'Dúzia de ovos brancos selecionados tipo grande de alta qualidade',
-        unidade: 'DZ',
-        peso: '650g',
-        preco_custo: 8.50,
-        preco_venda: 15.00,
-        preco_min: 12.00,
-        preco_max: 18.00,
-        quantidade_estoque: 100,
-        estoque_minimo: 35,
-        status: 'Ativo',
-        id_categoria: 3,
-        lote: '549111',
-        validade: '2026-09-25',
-        imagem: 'assets/ovos.png'
-      },
-      {
-        id_produto: 10,
-        codigo_barras: '78910010',
-        nome_produto: 'Suco de Uva Integral 500ml',
-        descricao: 'Suco de uva tinto 100% natural sem adição de açúcares ou conservantes',
-        unidade: 'UN',
-        peso: '500ml',
-        preco_custo: 4.80,
-        preco_venda: 8.00,
-        preco_min: 6.50,
-        preco_max: 10.00,
-        quantidade_estoque: 25,
-        estoque_minimo: 15,
-        status: 'Ativo',
-        id_categoria: 2,
-        lote: '578412',
-        validade: '2026-12-30',
-        imagem: 'assets/suco.png'
-      },
-      {
-        id_produto: 11,
-        codigo_barras: '78910011',
-        nome_produto: 'Pão Doce Tradicional',
-        descricao: 'Pão doce fofinho com creme de baunilha artesanal e coco ralado',
-        unidade: 'UN',
-        peso: '80g',
-        preco_custo: 1.10,
-        preco_venda: 3.20,
-        preco_min: 2.50,
-        preco_max: 4.00,
-        quantidade_estoque: 60,
-        estoque_minimo: 20,
-        status: 'Ativo',
-        id_categoria: 1,
-        lote: '548999',
-        validade: '2026-09-11',
-        imagem: 'assets/pao_doce.png'
-      },
-      {
-        id_produto: 12,
-        codigo_barras: '78910012',
-        nome_produto: 'Bala Toffee Mastigável',
-        descricao: 'Balas caramelizadas artesanais sortidas tradicionais da bomboniere',
-        unidade: 'UN',
-        peso: '10g',
-        preco_custo: 0.10,
-        preco_venda: 0.30,
-        preco_min: 0.20,
-        preco_max: 0.50,
-        quantidade_estoque: 200,
-        estoque_minimo: 50,
-        status: 'Ativo',
-        id_categoria: 4,
-        lote: '546111',
-        validade: '2027-04-10',
-        imagem: 'assets/bala.png'
-      }
-    ];
-
-    this.requisicoes = [
-      {
-        id_requisicao: 1,
-        codigo_pedido: 'REQ-9666',
-        fornecedor: 'Empresa Pão e Açúcar Dist.',
-        produto_nome: 'Café Pilão 320g',
-        id_produto: 2,
-        quantidade_pedida: 50,
-        quantidade_atendida: 15,
-        unidade: 'Pacote',
-        valor_unitario: 12.50,
-        valor_total: 625.00,
-        situacao: 'Em Aberto',
-        data_pedido: '2026-09-06',
-        previsao_entrega: '2026-09-12',
-        endereco_entrega: 'Padaria Nova York - Rua Visconde de Inhaúma, 450',
-        observacao: 'Pedido prioritário de café moído para atender o fluxo matinal da padaria.'
-      },
-      {
-        id_requisicao: 2,
-        codigo_pedido: 'REQ-9667',
-        fornecedor: 'Granja Santo André Ltda',
-        produto_nome: 'Ovos Brancos Granjeiros (Dúzia)',
-        id_produto: 9,
-        quantidade_pedida: 100,
-        quantidade_atendida: 0,
-        unidade: 'DZ',
-        valor_unitario: 8.50,
-        valor_total: 850.00,
-        situacao: 'Em Aberto',
-        data_pedido: '2026-09-07',
-        previsao_entrega: '2026-09-11',
-        endereco_entrega: 'Padrão',
-        observacao: 'Reposição semanal de ovos para a produção contínua da confeitaria.'
-      },
-      {
-        id_requisicao: 3,
-        codigo_pedido: 'REQ-9668',
-        fornecedor: 'Moinho Paulista de Trigo',
-        produto_nome: 'Farinha de Trigo Especial 1kg',
-        id_produto: 6,
-        quantidade_pedida: 50,
-        quantidade_atendida: 0,
-        unidade: 'Pacote',
-        valor_unitario: 4.10,
-        valor_total: 205.00,
-        situacao: 'Em Aberto',
-        data_pedido: '2026-09-07',
-        previsao_entrega: '2026-09-13',
-        endereco_entrega: 'Padrão',
-        observacao: 'Farinha com teor protéico ideal para a fornada diária de baguetes.'
-      },
-      {
-        id_requisicao: 4,
-        codigo_pedido: 'REQ-9669',
-        fornecedor: 'Confeitaria Doce Arte',
-        produto_nome: 'Bolo de Cenoura',
-        id_produto: 3,
-        quantidade_pedida: 30,
-        quantidade_atendida: 0,
-        unidade: 'Fatia',
-        valor_unitario: 4.50,
-        valor_total: 135.00,
-        situacao: 'Em Aberto',
-        data_pedido: '2026-09-08',
-        previsao_entrega: '2026-09-10',
-        endereco_entrega: 'Padrão',
-        observacao: 'Estoque atingiu nível crítico de 4 fatias no balcão refrigerado.'
-      },
-      {
-        id_requisicao: 5,
-        codigo_pedido: 'REQ-9670',
-        fornecedor: 'Panificadora Central e Distribuição',
-        produto_nome: 'Pão Francês',
-        id_produto: 4,
-        quantidade_pedida: 60,
-        quantidade_atendida: 60,
-        unidade: 'KG',
-        valor_unitario: 5.50,
-        valor_total: 330.00,
-        situacao: 'Finalizado',
-        data_pedido: '2026-09-04',
-        previsao_entrega: '2026-09-05',
-        endereco_entrega: 'Padrão',
-        observacao: 'Entregue com pontualidade e conferido integralmente pelo estoquista.'
-      },
-      {
-        id_requisicao: 6,
-        codigo_pedido: 'REQ-9665',
-        fornecedor: 'Distribuidora de Embalagens São Caetano',
-        produto_nome: 'Copos Descartáveis 200ml (Cento)',
-        id_produto: null,
-        quantidade_pedida: 20,
-        quantidade_atendida: 0,
-        unidade: 'Pacote',
-        valor_unitario: 12.00,
-        valor_total: 240.00,
-        situacao: 'Cancelado',
-        data_pedido: '2026-09-02',
-        previsao_entrega: '2026-09-05',
-        endereco_entrega: 'Padrão',
-        observacao: 'Pedido cancelado após conferência do estoque remanescente no almoxarifado.',
-        justificativa_cancelamento: 'Cancelamento efetuado após a verificação física constatar saldo remanescente suficiente para mais 3 semanas no depósito.'
-      }
-    ];
-
-    this.movimentacoes = [
-      {
-        id_movimentacao: 1,
-        tipo_movimentacao: 'Entrada',
-        quantidade: 60,
-        data_movimentacao: '2026-09-05 07:30',
-        observacao: 'Recebimento de lote do fornecedor Panificadora Central',
-        id_produto: 4,
-        produto_nome: 'Pão Francês',
-        codigo_barras: '78910004',
-        unidade: 'KG',
-        valor_unitario: 5.50,
-        valor_total: 330.00,
-        id_usuario: 1,
-        usuario_nome: 'Francisco'
-      },
-      {
-        id_movimentacao: 2,
-        tipo_movimentacao: 'Saída',
-        quantidade: 15,
-        data_movimentacao: '2026-09-07 18:20',
-        observacao: 'Vendas acumuladas do balcão de frios e lanches',
-        id_produto: 1,
-        produto_nome: 'Pão de Queijo',
-        codigo_barras: '78910001',
-        unidade: 'UN',
-        valor_unitario: 3.50,
-        valor_total: 52.50,
-        id_usuario: 2,
-        usuario_nome: 'Henry Sena'
-      },
-      {
-        id_movimentacao: 3,
-        tipo_movimentacao: 'Saída',
-        quantidade: 6,
-        data_movimentacao: '2026-09-08 14:10',
-        observacao: 'Venda de Café Pilão para clientes do salão',
-        id_produto: 2,
-        produto_nome: 'Café Pilão 320g',
-        codigo_barras: '78910002',
-        unidade: 'Pacote',
-        valor_unitario: 18.90,
-        valor_total: 113.40,
-        id_usuario: 2,
-        usuario_nome: 'Henry Sena'
-      }
-    ];
-
-    this.vendas = [
-      {
-        id_venda: 1,
-        codigo_venda: 'VENDA-1001',
-        data_venda: '2026-09-12 10:15',
-        valor_total: 90.00,
-        desconto: 0.00,
-        forma_pagamento: 'Cartão Débito',
-        status_venda: 'Concluída',
-        id_usuario: 2,
-        usuario_nome: 'Henry Sena',
-        itens: [
-          { id_item_venda: 1, id_produto: 2, nome_produto: 'Café Pilão 320g', quantidade: 5, valor_unitario: 18.00, subtotal: 90.00 }
-        ]
-      },
-      {
-        id_venda: 2,
-        codigo_venda: 'VENDA-1002',
-        data_venda: '2026-09-12 11:40',
-        valor_total: 118.40,
-        desconto: 0.00,
-        forma_pagamento: 'Dinheiro',
-        status_venda: 'Concluída',
-        id_usuario: 2,
-        usuario_nome: 'Henry Sena',
-        itens: [
-          { id_item_venda: 2, id_produto: 11, nome_produto: 'Pão Doce Tradicional', quantidade: 37, valor_unitario: 3.20, subtotal: 118.40 }
-        ]
-      },
-      {
-        id_venda: 3,
-        codigo_venda: 'VENDA-1003',
-        data_venda: '2026-09-12 13:10',
-        valor_total: 120.00,
-        desconto: 0.00,
-        forma_pagamento: 'PIX',
-        status_venda: 'Concluída',
-        id_usuario: 2,
-        usuario_nome: 'Henry Sena',
-        itens: [
-          { id_item_venda: 3, id_produto: 8, nome_produto: 'Leite Integral 1L', quantidade: 20, valor_unitario: 6.00, subtotal: 120.00 }
-        ]
-      },
-      {
-        id_venda: 4,
-        codigo_venda: 'VENDA-1004',
-        data_venda: '2026-09-12 14:35',
-        valor_total: 450.00,
-        desconto: 0.00,
-        forma_pagamento: 'Cartão Crédito',
-        status_venda: 'Concluída',
-        id_usuario: 2,
-        usuario_nome: 'Henry Sena',
-        itens: [
-          { id_item_venda: 4, id_produto: 9, nome_produto: 'Ovos Brancos Granjeiros (Dúzia)', quantidade: 30, valor_unitario: 15.00, subtotal: 450.00 }
-        ]
-      },
-      {
-        id_venda: 5,
-        codigo_venda: 'VENDA-1005',
-        data_venda: '2026-09-12 15:05',
-        valor_total: 110.00,
-        desconto: 0.00,
-        forma_pagamento: 'Dinheiro',
-        status_venda: 'Concluída',
-        id_usuario: 2,
-        usuario_nome: 'Henry Sena',
-        itens: [
-          { id_item_venda: 5, id_produto: 4, nome_produto: 'Pão Francês', quantidade: 6.5, valor_unitario: 16.90, subtotal: 110.00 }
-        ]
-      },
-      {
-        id_venda: 6,
-        codigo_venda: 'VENDA-1006',
-        data_venda: '2026-09-12 15:25',
-        valor_total: 96.00,
-        desconto: 0.00,
-        forma_pagamento: 'PIX',
-        status_venda: 'Concluída',
-        id_usuario: 2,
-        usuario_nome: 'Henry Sena',
-        itens: [
-          { id_item_venda: 6, id_produto: 10, nome_produto: 'Suco de Uva Integral 500ml', quantidade: 12, valor_unitario: 8.00, subtotal: 96.00 }
-        ]
-      }
-    ];
-
-    this.conferencias = [
-      {
-        id_conferencia: 1,
-        data_conferencia: '2026-09-10 14:00',
-        responsavel: 'Henry Sena',
-        observacao: 'Conferência de estoque físico e ajuste de saldos.',
-        itens: [
-          { id_produto: 5, nome_produto: 'Açúcar Cristal 1kg', unidade: 'Pacote', lote: '546326', quantidade_sistema: 12, quantidade_fisica: 12, divergencia: 0 },
-          { id_produto: 2, nome_produto: 'Café Pilão 320g', unidade: 'Pacote', lote: '548417', quantidade_sistema: 25, quantidade_fisica: 25, divergencia: 0 },
-          { id_produto: 4, nome_produto: 'Pão Francês', unidade: 'KG', lote: '545846', quantidade_sistema: 70, quantidade_fisica: 68, divergencia: -2 },
-          { id_produto: 10, nome_produto: 'Suco de Uva Integral 500ml', unidade: 'UN', lote: '578412', quantidade_sistema: 25, quantidade_fisica: 25, divergencia: 0 }
-        ]
-      }
-    ];
+  async getFornecedores() {
+    const [rows] = await pool.query('SELECT nome FROM fornecedores ORDER BY id_fornecedor');
+    return rows.map(r => r.nome);
   }
 
   // Métodos de Produtos (CRUD)
-  getProducts(query, categoriaId) {
-    let list = this.produtos.filter(p => p.status !== 'Inativo');
+  async getProducts(query, categoriaId) {
+    // A collation utf8mb4_0900_ai_ci já ignora acentos e maiúsculas no LIKE.
+    let sql = "SELECT * FROM produtos WHERE status <> 'Inativo'";
+    const params = [];
     if (categoriaId) {
-      list = list.filter(p => p.id_categoria === Number(categoriaId));
+      sql += ' AND id_categoria = ?';
+      params.push(Number(categoriaId));
     }
     if (query) {
-      const term = normalize(query);
-      list = list.filter(p =>
-        normalize(p.nome_produto).includes(term) ||
-        normalize(p.codigo_barras).includes(term) ||
-        normalize(p.descricao).includes(term)
-      );
+      const termo = `%${query}%`;
+      sql += ' AND (nome_produto LIKE ? OR codigo_barras LIKE ? OR descricao LIKE ?)';
+      params.push(termo, termo, termo);
     }
-    return list;
+    sql += ' ORDER BY id_produto';
+    const [rows] = await pool.query(sql, params);
+    return rows;
   }
 
-  getProductById(id) {
-    return this.produtos.find(p => p.id_produto === Number(id));
+  async getProductById(id, conn = pool) {
+    const [rows] = await conn.query('SELECT * FROM produtos WHERE id_produto = ?', [Number(id)]);
+    return rows[0];
   }
 
-  saveProduct(data) {
+  async saveProduct(data) {
     if (!data.nome_produto || !data.preco_venda) {
       throw new Error('Nome do produto e preço de venda são obrigatórios.');
     }
@@ -577,419 +83,490 @@ class MockDatabase {
     }
 
     if (data.descricao && data.descricao.trim().length > 0) {
-      if (data.descricao.trim().length < 10 || data.descricao.trim().length > 5000) {
+      if (!textoValido(data.descricao)) {
         throw new Error('A descrição do produto deve conter entre 10 e 5000 caracteres.');
       }
     }
 
+    const valoresNumericos = {
+      preco_custo: Number(data.preco_custo) || 0,
+      preco_venda: precoVenda,
+      preco_min: Number(data.preco_min) || precoVenda * 0.8,
+      preco_max: Number(data.preco_max) || precoVenda * 1.3,
+      quantidade_estoque: Number(data.quantidade_estoque) || 0,
+      estoque_minimo: Number(data.estoque_minimo) || 10,
+      id_categoria: Number(data.id_categoria) || 1
+    };
+
     if (data.id_produto) {
-      const idx = this.produtos.findIndex(p => p.id_produto === Number(data.id_produto));
-      if (idx === -1) throw new Error('Produto não encontrado.');
-      this.produtos[idx] = {
-        ...this.produtos[idx],
-        ...data,
-        id_produto: Number(data.id_produto),
-        preco_custo: Number(data.preco_custo) || 0,
-        preco_venda: precoVenda,
-        preco_min: Number(data.preco_min) || precoVenda * 0.8,
-        preco_max: Number(data.preco_max) || precoVenda * 1.3,
-        quantidade_estoque: Number(data.quantidade_estoque) || 0,
-        estoque_minimo: Number(data.estoque_minimo) || 10,
-        id_categoria: Number(data.id_categoria) || 1
+      const atual = await this.getProductById(data.id_produto);
+      if (!atual) throw new Error('Produto não encontrado.');
+      const campo = nome => (data[nome] !== undefined ? data[nome] : atual[nome]);
+      const prod = {
+        codigo_barras: campo('codigo_barras'),
+        nome_produto: data.nome_produto,
+        descricao: campo('descricao'),
+        unidade: campo('unidade'),
+        peso: campo('peso'),
+        status: campo('status'),
+        lote: campo('lote'),
+        validade: campo('validade') || null,
+        imagem: campo('imagem'),
+        ...valoresNumericos
       };
-      return this.produtos[idx];
-    } else {
-      const newId = this.produtos.length ? Math.max(...this.produtos.map(p => p.id_produto)) + 1 : 1;
-      const cod = data.codigo_barras || `789100${String(newId).padStart(2, '0')}`;
-      const newProd = {
-        id_produto: newId,
-        codigo_barras: cod,
+      await pool.query('UPDATE produtos SET ? WHERE id_produto = ?', [prod, atual.id_produto]);
+      return this.getProductById(atual.id_produto);
+    }
+
+    return transacao(async conn => {
+      const [result] = await conn.query('INSERT INTO produtos SET ?', [{
+        codigo_barras: data.codigo_barras || codigoTemporario(),
         nome_produto: data.nome_produto,
         descricao: data.descricao || '',
         unidade: data.unidade || 'UN',
         peso: data.peso || '100g',
-        preco_custo: Number(data.preco_custo) || 0,
-        preco_venda: precoVenda,
-        preco_min: Number(data.preco_min) || precoVenda * 0.8,
-        preco_max: Number(data.preco_max) || precoVenda * 1.3,
-        quantidade_estoque: Number(data.quantidade_estoque) || 0,
-        estoque_minimo: Number(data.estoque_minimo) || 10,
         status: 'Ativo',
-        id_categoria: Number(data.id_categoria) || 1,
         lote: data.lote || `L-${Math.floor(100000 + Math.random() * 900000)}`,
         validade: data.validade || '2026-12-31',
-        imagem: data.imagem || 'assets/pao.png'
-      };
-      this.produtos.push(newProd);
-      return newProd;
-    }
+        imagem: data.imagem || 'assets/pao.png',
+        ...valoresNumericos
+      }]);
+      const newId = result.insertId;
+      if (!data.codigo_barras) {
+        await conn.query('UPDATE produtos SET codigo_barras = ? WHERE id_produto = ?',
+          [`789100${String(newId).padStart(2, '0')}`, newId]);
+      }
+      return this.getProductById(newId, conn);
+    });
   }
 
-  deleteProduct(id) {
-    const idx = this.produtos.findIndex(p => p.id_produto === Number(id));
-    if (idx === -1) throw new Error('Produto não encontrado.');
-    this.produtos[idx].status = 'Inativo';
+  async deleteProduct(id) {
+    const [result] = await pool.query("UPDATE produtos SET status = 'Inativo' WHERE id_produto = ?", [Number(id)]);
+    if (result.affectedRows === 0) throw new Error('Produto não encontrado.');
     return true;
   }
 
-  getAlertasCriticos() {
-    return this.produtos
-      .filter(p => p.status === 'Ativo' && Number(p.quantidade_estoque) <= Number(p.estoque_minimo))
-      .map(p => ({
-        id_produto: p.id_produto,
-        nome_produto: p.nome_produto,
-        unidade: p.unidade,
-        quantidade_estoque: p.quantidade_estoque,
-        estoque_minimo: p.estoque_minimo,
-        lote: p.lote,
-        categoria_id: p.id_categoria,
-        mensagem: `${p.nome_produto} atingiu o estoque mínimo (${p.quantidade_estoque} ${p.unidade} disponíveis, mín: ${p.estoque_minimo})`
-      }));
+  async getAlertasCriticos() {
+    const [rows] = await pool.query(`
+      SELECT id_produto, nome_produto, unidade, quantidade_estoque, estoque_minimo, lote, id_categoria
+        FROM produtos
+       WHERE status = 'Ativo' AND quantidade_estoque <= estoque_minimo
+       ORDER BY id_produto`);
+    return rows.map(p => ({
+      id_produto: p.id_produto,
+      nome_produto: p.nome_produto,
+      unidade: p.unidade,
+      quantidade_estoque: p.quantidade_estoque,
+      estoque_minimo: p.estoque_minimo,
+      lote: p.lote,
+      categoria_id: p.id_categoria,
+      mensagem: `${p.nome_produto} atingiu o estoque mínimo (${p.quantidade_estoque} ${p.unidade} disponíveis, mín: ${p.estoque_minimo})`
+    }));
   }
 
-  getDashboardData() {
-    const totalProdutos = this.produtos.filter(p => p.status === 'Ativo').length;
-    const produtosEmAlerta = this.getAlertasCriticos();
-    const totalEmEstoque = this.produtos
-      .filter(p => p.status === 'Ativo')
-      .reduce((acc, p) => acc + Number(p.quantidade_estoque), 0);
-    const requisicoesAbertas = this.requisicoes.filter(r => r.situacao === 'Em Aberto');
-    const totalVendasHoje = this.vendas
-      .filter(v => v.status_venda === 'Concluída')
-      .reduce((acc, v) => acc + Number(v.valor_total), 0);
+  async getDashboardData() {
+    const [[totais]] = await pool.query(`
+      SELECT COUNT(*) AS totalProdutos, COALESCE(SUM(quantidade_estoque), 0) AS totalEmEstoque
+        FROM produtos WHERE status = 'Ativo'`);
+    const [[{ abertas }]] = await pool.query(
+      "SELECT COUNT(*) AS abertas FROM requisicoes WHERE situacao = 'Em Aberto'");
+    // Mesmo comportamento do banco em memória: soma todas as vendas concluídas.
+    const [[{ totalVendas }]] = await pool.query(
+      "SELECT COALESCE(SUM(valor_total), 0) AS totalVendas FROM vendas WHERE status_venda = 'Concluída'");
+    const [porCategoria] = await pool.query(`
+      SELECT c.nome_categoria AS categoria, SUM(p.quantidade_estoque) AS quantidade
+        FROM categorias c
+        JOIN produtos p ON p.id_categoria = c.id_categoria AND p.status = 'Ativo'
+       GROUP BY c.id_categoria, c.nome_categoria
+      HAVING quantidade > 0
+       ORDER BY c.id_categoria`);
+    const [[usuarioAtivo]] = await pool.query(
+      'SELECT id_usuario, nome, email, cargo, status, data_criacao, id_perfil FROM usuarios WHERE id_usuario = ?',
+      [USUARIO_GERENTE]);
 
-    const categoriasMap = {};
-    this.categorias.forEach(c => {
-      categoriasMap[c.id_categoria] = { nome: c.nome_categoria, total: 0 };
-    });
-    this.produtos.forEach(p => {
-      if (p.status === 'Ativo' && categoriasMap[p.id_categoria]) {
-        categoriasMap[p.id_categoria].total += Number(p.quantidade_estoque);
-      }
-    });
-
-    const distribuicaoEstoque = Object.values(categoriasMap)
-      .filter(item => item.total > 0)
-      .map(item => ({
-        categoria: item.nome,
-        quantidade: item.total,
-        porcentagem: totalEmEstoque > 0 ? ((item.total / totalEmEstoque) * 100).toFixed(1) : '0'
-      }));
+    const totalEmEstoque = Number(totais.totalEmEstoque);
+    const produtosEmAlerta = await this.getAlertasCriticos();
+    const ultimasCompras = (await this.getRequisicoes()).slice(0, 6);
 
     return {
-      usuarioAtivo: this.usuarios[0],
+      usuarioAtivo,
       metricas: {
-        totalProdutos,
+        totalProdutos: totais.totalProdutos,
         alertasCriticosCount: produtosEmAlerta.length,
         totalItensEstoque: totalEmEstoque,
-        requisicoesAbertasCount: requisicoesAbertas.length,
-        totalVendasHoje: totalVendasHoje.toFixed(2)
+        requisicoesAbertasCount: abertas,
+        totalVendasHoje: Number(totalVendas).toFixed(2)
       },
       alertas: produtosEmAlerta,
-      ultimasCompras: this.requisicoes.slice(0, 6),
-      distribuicaoEstoque
+      ultimasCompras,
+      distribuicaoEstoque: porCategoria.map(item => ({
+        categoria: item.categoria,
+        quantidade: Number(item.quantidade),
+        porcentagem: totalEmEstoque > 0 ? ((Number(item.quantidade) / totalEmEstoque) * 100).toFixed(1) : '0'
+      }))
     };
   }
 
   // Requisições
-  createRequisicao(data) {
+  async getRequisicoes() {
+    const [rows] = await pool.query(`${SQL_REQUISICAO} ORDER BY r.id_requisicao DESC`);
+    return rows;
+  }
+
+  async getRequisicaoById(id, conn = pool) {
+    const [rows] = await conn.query(`${SQL_REQUISICAO} WHERE r.id_requisicao = ?`, [Number(id)]);
+    return rows[0];
+  }
+
+  async createRequisicao(data) {
     if (!data.fornecedor) throw new Error('Selecione um fornecedor da lista.');
     if (data.observacao && data.observacao.trim().length > 0) {
-      if (data.observacao.trim().length < 10 || data.observacao.trim().length > 5000) {
+      if (!textoValido(data.observacao)) {
         throw new Error('A observação da requisição deve ter entre 10 e 5000 caracteres.');
       }
     }
 
-    const newId = this.requisicoes.length ? Math.max(...this.requisicoes.map(r => r.id_requisicao)) + 1 : 1;
-    const req = {
-      id_requisicao: newId,
-      codigo_pedido: `REQ-${9660 + newId}`,
-      fornecedor: data.fornecedor,
-      produto_nome: data.produto_nome,
-      id_produto: data.id_produto ? Number(data.id_produto) : null,
-      quantidade_pedida: Number(data.quantidade_pedida) || 1,
-      quantidade_atendida: 0,
-      unidade: data.unidade || 'UN',
-      valor_unitario: Number(data.valor_unitario) || 0,
-      valor_total: (Number(data.quantidade_pedida) || 1) * (Number(data.valor_unitario) || 0),
-      situacao: 'Em Aberto',
-      data_pedido: new Date().toISOString().slice(0, 10),
-      previsao_entrega: data.previsao_entrega || '2026-09-18',
-      endereco_entrega: data.endereco_entrega || 'Padrão - Padaria Nova York',
-      observacao: data.observacao || ''
-    };
-    this.requisicoes.unshift(req);
-    return req;
+    return transacao(async conn => {
+      const [forn] = await conn.query('SELECT id_fornecedor FROM fornecedores WHERE nome = ?', [data.fornecedor]);
+      if (!forn.length) throw new Error('Fornecedor não encontrado. Selecione um fornecedor da lista.');
+
+      const [result] = await conn.query('INSERT INTO requisicoes SET ?', [{
+        codigo_pedido: codigoTemporario(),
+        id_fornecedor: forn[0].id_fornecedor,
+        id_produto: data.id_produto ? Number(data.id_produto) : null,
+        produto_nome: data.produto_nome,
+        quantidade_pedida: Number(data.quantidade_pedida) || 1,
+        unidade: data.unidade || 'UN',
+        valor_unitario: Number(data.valor_unitario) || 0,
+        previsao_entrega: data.previsao_entrega || null,
+        endereco_entrega: data.endereco_entrega || 'Padrão - Padaria Nova York',
+        observacao: data.observacao || ''
+      }]);
+      const newId = result.insertId;
+      // Próximo número a partir do maior código existente (os códigos do histórico não seguem o id).
+      const [[{ ultimo }]] = await conn.query(`
+        SELECT COALESCE(MAX(CAST(SUBSTRING(codigo_pedido, 5) AS UNSIGNED)), 9660) AS ultimo
+          FROM requisicoes WHERE codigo_pedido LIKE 'REQ-%' FOR UPDATE`);
+      await conn.query('UPDATE requisicoes SET codigo_pedido = ? WHERE id_requisicao = ?',
+        [`REQ-${ultimo + 1}`, newId]);
+      return this.getRequisicaoById(newId, conn);
+    });
   }
 
-  updateRequisicaoStatus(id, situacao, justificativa = '') {
-    const req = this.requisicoes.find(r => r.id_requisicao === Number(id));
-    if (!req) throw new Error('Requisição não encontrada.');
-
-    if (situacao === 'Cancelado') {
-      const justTrim = (justificativa || '').trim();
-      if (justTrim.length < 10 || justTrim.length > 5000) {
-        throw new Error('O motivo de cancelamento é obrigatório e deve ter entre 10 e 5000 caracteres.');
+  async updateRequisicaoStatus(id, situacao, justificativa = '') {
+    return transacao(async conn => {
+      const [rows] = await conn.query(
+        'SELECT * FROM requisicoes WHERE id_requisicao = ? FOR UPDATE', [Number(id)]);
+      const req = rows[0];
+      if (!req) throw new Error('Requisição não encontrada.');
+      // Evita dar entrada duas vezes no estoque pela mesma requisição.
+      if (req.situacao !== 'Em Aberto') {
+        throw new Error(`Esta requisição já está "${req.situacao}" e não pode mais ser alterada.`);
       }
-      req.justificativa_cancelamento = justTrim;
-    }
 
-    req.situacao = situacao;
+      if (situacao === 'Cancelado') {
+        if (!textoValido(justificativa)) {
+          throw new Error('O motivo de cancelamento é obrigatório e deve ter entre 10 e 5000 caracteres.');
+        }
+        await conn.query(
+          'UPDATE requisicoes SET situacao = ?, justificativa_cancelamento = ? WHERE id_requisicao = ?',
+          [situacao, justificativa.trim(), req.id_requisicao]);
+      } else {
+        await conn.query('UPDATE requisicoes SET situacao = ? WHERE id_requisicao = ?', [situacao, req.id_requisicao]);
+      }
 
-    if (situacao === 'Finalizado' && req.id_produto) {
-      const prod = this.getProductById(req.id_produto);
-      if (prod) {
-        prod.quantidade_estoque += Number(req.quantidade_pedida);
-        this.addMovimentacao({
+      if (situacao === 'Finalizado' && req.id_produto) {
+        const atualizada = await this.getRequisicaoById(req.id_requisicao, conn);
+        await conn.query('UPDATE produtos SET quantidade_estoque = quantidade_estoque + ? WHERE id_produto = ?',
+          [req.quantidade_pedida, req.id_produto]);
+        await this.addMovimentacao(conn, {
           tipo_movimentacao: 'Entrada',
           quantidade: req.quantidade_pedida,
-          observacao: `Entrada automática por recebimento de requisição ${req.codigo_pedido} (${req.fornecedor})`,
-          id_produto: prod.id_produto,
-          produto_nome: prod.nome_produto,
-          codigo_barras: prod.codigo_barras,
-          unidade: prod.unidade,
+          observacao: `Entrada automática por recebimento de requisição ${req.codigo_pedido} (${atualizada.fornecedor})`,
+          id_produto: req.id_produto,
           valor_unitario: req.valor_unitario,
-          valor_total: req.valor_total,
-          id_usuario: 1,
-          usuario_nome: 'Francisco'
+          id_usuario: USUARIO_GERENTE,
+          id_requisicao: req.id_requisicao
         });
       }
-    }
-    return req;
+      return this.getRequisicaoById(req.id_requisicao, conn);
+    });
   }
 
-  addMovimentacao(data) {
-    const newId = this.movimentacoes.length ? Math.max(...this.movimentacoes.map(m => m.id_movimentacao)) + 1 : 1;
-    const now = new Date();
-    const dataFormatada = `${now.toISOString().slice(0, 10)} ${now.toTimeString().slice(0, 5)}`;
-    const mov = {
-      id_movimentacao: newId,
+  // Movimentações de Estoque
+  async getMovimentacoes(tipo) {
+    let sql = SQL_MOVIMENTACAO;
+    const params = [];
+    if (tipo) {
+      sql += ' WHERE m.tipo_movimentacao = ?';
+      params.push(tipo);
+    }
+    sql += ' ORDER BY m.id_movimentacao DESC';
+    const [rows] = await pool.query(sql, params);
+    return rows;
+  }
+
+  // Grava uma linha de movimentação usando a conexão da transação em andamento.
+  async addMovimentacao(conn, data) {
+    const [result] = await conn.query('INSERT INTO movimentacoes SET ?', [{
       tipo_movimentacao: data.tipo_movimentacao,
       quantidade: Number(data.quantidade),
-      data_movimentacao: dataFormatada,
       observacao: data.observacao || '',
       id_produto: Number(data.id_produto),
-      produto_nome: data.produto_nome,
-      codigo_barras: data.codigo_barras || '',
-      unidade: data.unidade || 'UN',
       valor_unitario: Number(data.valor_unitario) || 0,
-      valor_total: (Number(data.quantidade) || 0) * (Number(data.valor_unitario) || 0),
-      id_usuario: data.id_usuario || 1,
-      usuario_nome: data.usuario_nome || 'Francisco'
-    };
-    this.movimentacoes.unshift(mov);
-    return mov;
+      id_usuario: data.id_usuario || USUARIO_GERENTE,
+      id_venda: data.id_venda || null,
+      id_requisicao: data.id_requisicao || null
+    }]);
+    const [rows] = await conn.query(`${SQL_MOVIMENTACAO} WHERE m.id_movimentacao = ?`, [result.insertId]);
+    return rows[0];
   }
 
-  registrarMovimentacaoEstoque(data) {
-    const prod = this.getProductById(data.id_produto);
-    if (!prod) throw new Error('Produto não encontrado.');
-
+  async registrarMovimentacaoEstoque(data) {
     const qtd = Number(data.quantidade);
-    if (qtd <= 0) throw new Error('A quantidade deve ser maior que zero.');
+    if (!(qtd > 0)) throw new Error('A quantidade deve ser maior que zero.');
 
     if (data.observacao && data.observacao.trim().length > 0) {
-      if (data.observacao.trim().length < 10 || data.observacao.trim().length > 5000) {
+      if (!textoValido(data.observacao)) {
         throw new Error('O motivo da movimentação deve ter entre 10 e 5000 caracteres.');
       }
     }
 
-    if (data.tipo_movimentacao === 'Saída') {
-      if (prod.quantidade_estoque < qtd) {
-        throw new Error(`Estoque insuficiente! Saldo disponível: ${prod.quantidade_estoque} ${prod.unidade}.`);
-      }
-      prod.quantidade_estoque -= qtd;
-    } else {
-      prod.quantidade_estoque += qtd;
-    }
+    return transacao(async conn => {
+      const [rows] = await conn.query(
+        'SELECT * FROM produtos WHERE id_produto = ? FOR UPDATE', [Number(data.id_produto)]);
+      const prod = rows[0];
+      if (!prod) throw new Error('Produto não encontrado.');
 
-    return this.addMovimentacao({
-      tipo_movimentacao: data.tipo_movimentacao,
-      quantidade: qtd,
-      observacao: data.observacao || `Movimentação manual registrada no sistema (${data.tipo_movimentacao})`,
-      id_produto: prod.id_produto,
-      produto_nome: prod.nome_produto,
-      codigo_barras: prod.codigo_barras,
-      unidade: prod.unidade,
-      valor_unitario: data.tipo_movimentacao === 'Saída' ? prod.preco_venda : prod.preco_custo,
-      id_usuario: 2,
-      usuario_nome: 'Henry Sena'
+      if (data.tipo_movimentacao === 'Saída') {
+        if (prod.quantidade_estoque < qtd) {
+          throw new Error(`Estoque insuficiente! Saldo disponível: ${prod.quantidade_estoque} ${prod.unidade}.`);
+        }
+        await conn.query('UPDATE produtos SET quantidade_estoque = quantidade_estoque - ? WHERE id_produto = ?',
+          [qtd, prod.id_produto]);
+      } else {
+        await conn.query('UPDATE produtos SET quantidade_estoque = quantidade_estoque + ? WHERE id_produto = ?',
+          [qtd, prod.id_produto]);
+      }
+
+      return this.addMovimentacao(conn, {
+        tipo_movimentacao: data.tipo_movimentacao,
+        quantidade: qtd,
+        observacao: data.observacao || `Movimentação manual registrada no sistema (${data.tipo_movimentacao})`,
+        id_produto: prod.id_produto,
+        valor_unitario: data.tipo_movimentacao === 'Saída' ? prod.preco_venda : prod.preco_custo,
+        id_usuario: USUARIO_OPERADOR
+      });
     });
   }
 
-  realizarVenda(data) {
+  // Vendas / Balcão (PDV)
+  async getVendas(conn = pool, idVenda = null) {
+    let sql = `
+      SELECT v.id_venda, v.codigo_venda, DATE_FORMAT(v.data_venda, '${FMT_DATA_HORA}') AS data_venda,
+             v.valor_total, v.desconto, v.forma_pagamento, v.status_venda, v.id_usuario,
+             u.nome AS usuario_nome
+        FROM vendas v
+        JOIN usuarios u ON u.id_usuario = v.id_usuario`;
+    const params = [];
+    if (idVenda) {
+      sql += ' WHERE v.id_venda = ?';
+      params.push(Number(idVenda));
+    }
+    sql += ' ORDER BY v.id_venda DESC';
+    const [vendas] = await conn.query(sql, params);
+    if (!vendas.length) return [];
+
+    const [itens] = await conn.query(`
+      SELECT i.id_item_venda, i.id_venda, i.id_produto, p.nome_produto, i.quantidade, p.unidade,
+             i.valor_unitario, i.subtotal
+        FROM itens_venda i
+        JOIN produtos p ON p.id_produto = i.id_produto
+       WHERE i.id_venda IN (?)
+       ORDER BY i.id_item_venda`, [vendas.map(v => v.id_venda)]);
+
+    return vendas.map(v => ({
+      ...v,
+      itens: itens.filter(i => i.id_venda === v.id_venda).map(({ id_venda, ...item }) => item)
+    }));
+  }
+
+  async realizarVenda(data) {
     if (!data.itens || !data.itens.length) {
       throw new Error('Nenhum item inserido na venda.');
     }
 
-    for (const item of data.itens) {
-      const prod = this.getProductById(item.id_produto);
-      if (!prod) throw new Error(`Produto código #${item.id_produto} não localizado.`);
-      if (prod.quantidade_estoque < Number(item.quantidade)) {
-        throw new Error(`Quantidade indisponível em estoque para "${prod.nome_produto}"! Solicitado: ${item.quantidade}, Em estoque: ${prod.quantidade_estoque} ${prod.unidade}.`);
+    return transacao(async conn => {
+      // Trava os produtos da venda e confere o estoque de todos antes de gravar qualquer coisa.
+      const produtos = {};
+      for (const item of data.itens) {
+        const [rows] = await conn.query(
+          'SELECT * FROM produtos WHERE id_produto = ? FOR UPDATE', [Number(item.id_produto)]);
+        const prod = rows[0];
+        if (!prod) throw new Error(`Produto código #${item.id_produto} não localizado.`);
+        if (prod.quantidade_estoque < Number(item.quantidade)) {
+          throw new Error(`Quantidade indisponível em estoque para "${prod.nome_produto}"! Solicitado: ${item.quantidade}, Em estoque: ${prod.quantidade_estoque} ${prod.unidade}.`);
+        }
+        produtos[prod.id_produto] = prod;
       }
-    }
 
-    const itensProcessados = [];
-    let subtotalGeral = 0;
-
-    data.itens.forEach((item, index) => {
-      const prod = this.getProductById(item.id_produto);
-      const qtd = Number(item.quantidade);
-      const precoUnit = Number(item.valor_unitario) || prod.preco_venda;
-      const subtotal = qtd * precoUnit;
-
-      prod.quantidade_estoque -= qtd;
-      subtotalGeral += subtotal;
-
-      itensProcessados.push({
-        id_item_venda: index + 1,
-        id_produto: prod.id_produto,
-        nome_produto: prod.nome_produto,
-        quantidade: qtd,
-        unidade: prod.unidade,
-        valor_unitario: precoUnit,
-        subtotal: subtotal
+      const itens = data.itens.map(item => {
+        const prod = produtos[Number(item.id_produto)];
+        const qtd = Number(item.quantidade);
+        const precoUnit = Number(item.valor_unitario) || prod.preco_venda;
+        return { prod, qtd, precoUnit, subtotal: qtd * precoUnit };
       });
 
-      this.addMovimentacao({
-        tipo_movimentacao: 'Saída',
-        quantidade: qtd,
-        observacao: `Baixa automática de venda no balcão da padaria`,
-        id_produto: prod.id_produto,
-        produto_nome: prod.nome_produto,
-        codigo_barras: prod.codigo_barras,
-        unidade: prod.unidade,
-        valor_unitario: precoUnit,
-        valor_total: subtotal,
-        id_usuario: 2,
-        usuario_nome: 'Henry Sena'
-      });
+      const subtotalGeral = itens.reduce((acc, i) => acc + i.subtotal, 0);
+      const desconto = Number(data.desconto) || 0;
+      const totalFinal = Math.max(0, subtotalGeral - desconto);
+
+      const [result] = await conn.query('INSERT INTO vendas SET ?', [{
+        codigo_venda: codigoTemporario(),
+        valor_total: totalFinal,
+        desconto,
+        forma_pagamento: data.forma_pagamento || 'Dinheiro',
+        id_usuario: USUARIO_OPERADOR
+      }]);
+      const idVenda = result.insertId;
+      await conn.query('UPDATE vendas SET codigo_venda = ? WHERE id_venda = ?', [`VENDA-${1000 + idVenda}`, idVenda]);
+
+      for (const { prod, qtd, precoUnit } of itens) {
+        await conn.query('INSERT INTO itens_venda (id_venda, id_produto, quantidade, valor_unitario) VALUES (?, ?, ?, ?)',
+          [idVenda, prod.id_produto, qtd, precoUnit]);
+        await conn.query('UPDATE produtos SET quantidade_estoque = quantidade_estoque - ? WHERE id_produto = ?',
+          [qtd, prod.id_produto]);
+        await this.addMovimentacao(conn, {
+          tipo_movimentacao: 'Saída',
+          quantidade: qtd,
+          observacao: 'Baixa automática de venda no balcão da padaria',
+          id_produto: prod.id_produto,
+          valor_unitario: precoUnit,
+          id_usuario: USUARIO_OPERADOR,
+          id_venda: idVenda
+        });
+      }
+
+      const [venda] = await this.getVendas(conn, idVenda);
+      return venda;
     });
-
-    const desconto = Number(data.desconto) || 0;
-    const totalFinal = Math.max(0, subtotalGeral - desconto);
-
-    const now = new Date();
-    const dataFormatada = `${now.toISOString().slice(0, 10)} ${now.toTimeString().slice(0, 5)}`;
-    const newId = this.vendas.length ? Math.max(...this.vendas.map(v => v.id_venda)) + 1 : 1;
-
-    const novaVenda = {
-      id_venda: newId,
-      codigo_venda: `VENDA-${1000 + newId}`,
-      data_venda: dataFormatada,
-      valor_total: totalFinal,
-      desconto: desconto,
-      forma_pagamento: data.forma_pagamento || 'Dinheiro',
-      status_venda: 'Concluída',
-      id_usuario: 2,
-      usuario_nome: 'Henry Sena',
-      itens: itensProcessados
-    };
-
-    this.vendas.unshift(novaVenda);
-    return novaVenda;
   }
 
-  cancelarVenda(idVenda) {
-    const venda = this.vendas.find(v => v.id_venda === Number(idVenda));
-    if (!venda) throw new Error('Venda não encontrada.');
-    if (venda.status_venda === 'Cancelada') throw new Error('Esta venda já está cancelada.');
+  async cancelarVenda(idVenda) {
+    return transacao(async conn => {
+      const [rows] = await conn.query('SELECT * FROM vendas WHERE id_venda = ? FOR UPDATE', [Number(idVenda)]);
+      const venda = rows[0];
+      if (!venda) throw new Error('Venda não encontrada.');
+      if (venda.status_venda === 'Cancelada') throw new Error('Esta venda já está cancelada.');
 
-    venda.itens.forEach(item => {
-      const prod = this.getProductById(item.id_produto);
-      if (prod) {
-        prod.quantidade_estoque += Number(item.quantidade);
-        this.addMovimentacao({
+      const [itens] = await conn.query('SELECT * FROM itens_venda WHERE id_venda = ?', [venda.id_venda]);
+      for (const item of itens) {
+        await conn.query('UPDATE produtos SET quantidade_estoque = quantidade_estoque + ? WHERE id_produto = ?',
+          [item.quantidade, item.id_produto]);
+        await this.addMovimentacao(conn, {
           tipo_movimentacao: 'Entrada',
           quantidade: item.quantidade,
           observacao: `Estorno de estoque por cancelamento da venda ${venda.codigo_venda}`,
-          id_produto: prod.id_produto,
-          produto_nome: prod.nome_produto,
-          codigo_barras: prod.codigo_barras,
-          unidade: prod.unidade,
+          id_produto: item.id_produto,
           valor_unitario: item.valor_unitario,
-          valor_total: item.subtotal,
-          id_usuario: 1,
-          usuario_nome: 'Francisco (Gerente)'
+          id_usuario: USUARIO_GERENTE,
+          id_venda: venda.id_venda
         });
       }
-    });
 
-    venda.status_venda = 'Cancelada';
-    return venda;
+      await conn.query("UPDATE vendas SET status_venda = 'Cancelada' WHERE id_venda = ?", [venda.id_venda]);
+      const [cancelada] = await this.getVendas(conn, venda.id_venda);
+      return cancelada;
+    });
   }
 
-  salvarConferencia(responsavel, itensConferidos, observacao = '') {
-    const now = new Date();
-    const dataFormatada = `${now.toISOString().slice(0, 10)} ${now.toTimeString().slice(0, 5)}`;
-    const newId = this.conferencias.length ? Math.max(...this.conferencias.map(c => c.id_conferencia)) + 1 : 1;
+  // Conferência de Inventário Físico
+  async getConferencias(conn = pool, idConferencia = null) {
+    let sql = `
+      SELECT c.id_conferencia, DATE_FORMAT(c.data_conferencia, '${FMT_DATA_HORA}') AS data_conferencia,
+             u.nome AS responsavel, c.observacao
+        FROM conferencias c
+        JOIN usuarios u ON u.id_usuario = c.id_usuario`;
+    const params = [];
+    if (idConferencia) {
+      sql += ' WHERE c.id_conferencia = ?';
+      params.push(Number(idConferencia));
+    }
+    sql += ' ORDER BY c.id_conferencia DESC';
+    const [conferencias] = await conn.query(sql, params);
+    if (!conferencias.length) return [];
 
-    const itensProcessados = itensConferidos.map(item => {
-      const prod = this.getProductById(item.id_produto);
-      const qtdFisica = Number(item.quantidade_fisica);
-      const qtdSistema = prod ? Number(prod.quantidade_estoque) : 0;
-      const divergencia = qtdFisica - qtdSistema;
+    const [itens] = await conn.query(`
+      SELECT i.id_conferencia, i.id_produto, p.nome_produto, p.unidade, i.lote,
+             i.quantidade_sistema, i.quantidade_fisica, i.divergencia
+        FROM itens_conferencia i
+        JOIN produtos p ON p.id_produto = i.id_produto
+       WHERE i.id_conferencia IN (?)
+       ORDER BY i.id_item_conferencia`, [conferencias.map(c => c.id_conferencia)]);
 
-      if (prod && item.ajustarEstoque) {
-        prod.quantidade_estoque = qtdFisica;
+    return conferencias.map(c => ({
+      ...c,
+      itens: itens.filter(i => i.id_conferencia === c.id_conferencia).map(({ id_conferencia, ...item }) => item)
+    }));
+  }
+
+  async salvarConferencia(responsavel, itensConferidos, observacao = '') {
+    if (!itensConferidos || !itensConferidos.length) {
+      throw new Error('Nenhum item informado na conferência.');
+    }
+
+    return transacao(async conn => {
+      const [usuarios] = await conn.query('SELECT id_usuario FROM usuarios WHERE nome = ?', [responsavel || '']);
+      const idUsuario = usuarios.length ? usuarios[0].id_usuario : USUARIO_OPERADOR;
+
+      const [result] = await conn.query(
+        'INSERT INTO conferencias (id_usuario, observacao) VALUES (?, ?)', [idUsuario, observacao || '']);
+      const idConferencia = result.insertId;
+
+      for (const item of itensConferidos) {
+        const [rows] = await conn.query(
+          'SELECT * FROM produtos WHERE id_produto = ? FOR UPDATE', [Number(item.id_produto)]);
+        const prod = rows[0];
+        if (!prod) throw new Error(`Produto código #${item.id_produto} não localizado.`);
+        const qtdFisica = Number(item.quantidade_fisica);
+
+        await conn.query(`
+          INSERT INTO itens_conferencia
+            (id_conferencia, id_produto, lote, quantidade_sistema, quantidade_fisica, estoque_ajustado)
+          VALUES (?, ?, ?, ?, ?, ?)`,
+          [idConferencia, prod.id_produto, prod.lote, prod.quantidade_estoque, qtdFisica, !!item.ajustarEstoque]);
+
+        if (item.ajustarEstoque) {
+          await conn.query('UPDATE produtos SET quantidade_estoque = ? WHERE id_produto = ?', [qtdFisica, prod.id_produto]);
+        }
       }
 
-      return {
-        id_produto: item.id_produto,
-        nome_produto: prod ? prod.nome_produto : 'Item',
-        unidade: prod ? prod.unidade : 'UN',
-        lote: prod ? prod.lote : '-',
-        quantidade_sistema: qtdSistema,
-        quantidade_fisica: qtdFisica,
-        divergencia: divergencia
-      };
+      const [conferencia] = await this.getConferencias(conn, idConferencia);
+      return conferencia;
     });
-
-    const conferencia = {
-      id_conferencia: newId,
-      data_conferencia: dataFormatada,
-      responsavel: responsavel || 'Henry Sena',
-      observacao: observacao,
-      itens: itensProcessados
-    };
-
-    this.conferencias.unshift(conferencia);
-    return conferencia;
   }
 
-  getRelatorioVendas() {
-    const produtosVendidosMap = {};
-    let totalFaturamento = 0;
-
-    this.vendas
-      .filter(v => v.status_venda === 'Concluída')
-      .forEach(v => {
-        totalFaturamento += Number(v.valor_total);
-        v.itens.forEach(item => {
-          if (!produtosVendidosMap[item.id_produto]) {
-            produtosVendidosMap[item.id_produto] = {
-              id_produto: item.id_produto,
-              nome_produto: item.nome_produto,
-              quantidade: 0,
-              valor_unitario: item.valor_unitario,
-              total: 0
-            };
-          }
-          produtosVendidosMap[item.id_produto].quantidade += Number(item.quantidade);
-          produtosVendidosMap[item.id_produto].total += Number(item.subtotal);
-        });
-      });
-
-    const ranking = Object.values(produtosVendidosMap).sort((a, b) => b.total - a.total);
+  // Relatórios
+  async getRelatorioVendas() {
+    const [ranking] = await pool.query(`
+      SELECT i.id_produto, p.nome_produto, SUM(i.quantidade) AS quantidade,
+             MIN(i.valor_unitario) AS valor_unitario, SUM(i.subtotal) AS total
+        FROM itens_venda i
+        JOIN vendas v ON v.id_venda = i.id_venda AND v.status_venda = 'Concluída'
+        JOIN produtos p ON p.id_produto = i.id_produto
+       GROUP BY i.id_produto, p.nome_produto
+       ORDER BY total DESC`);
+    const [[resumo]] = await pool.query(`
+      SELECT COALESCE(SUM(valor_total), 0) AS totalGeral, COUNT(*) AS quantidadeTransacoes
+        FROM vendas WHERE status_venda = 'Concluída'`);
 
     return {
-      totalGeral: totalFaturamento,
-      itensVendidos: ranking,
-      quantidadeTransacoes: this.vendas.filter(v => v.status_venda === 'Concluída').length,
-      historicoVendas: this.vendas
+      totalGeral: Number(resumo.totalGeral),
+      itensVendidos: ranking.map(r => ({ ...r, quantidade: Number(r.quantidade), total: Number(r.total) })),
+      quantidadeTransacoes: resumo.quantidadeTransacoes,
+      historicoVendas: await this.getVendas()
     };
   }
 }
 
-module.exports = new MockDatabase();
+module.exports = new MySQLDatabase();

@@ -1,224 +1,413 @@
-// server.js - Servidor HTTP e API RESTful do GestFast ERP
+// server.js - Servidor HTTP e API RESTful do GestFast ERP (sem dependências externas)
+process.env.TZ = process.env.TZ || 'America/Sao_Paulo';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const url = require('url');
 const db = require('./db');
-const { testarConexao } = require('./database/conexao');
+const { HttpError, erro } = require('./lib/errors');
+const { can, listFor } = require('./lib/permissions');
+const logger = require('./lib/logger');
+const { buildXlsx, buildPdf } = require('./lib/export');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const UPLOAD_DIR = path.join(path.dirname(db.file === ':memory:' ? path.join(__dirname, 'data', 'x') : db.file), 'uploads');
+const COOKIE = 'gf_session';
+const MAX_BODY = 4 * 1024 * 1024;
 
 const MIME_TYPES = {
-  '.html': 'text/html; charset=UTF-8',
-  '.css': 'text/css; charset=UTF-8',
-  '.js': 'application/javascript; charset=UTF-8',
-  '.json': 'application/json; charset=UTF-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.svg': 'image/svg+xml'
+  '.html': 'text/html; charset=UTF-8', '.css': 'text/css; charset=UTF-8', '.js': 'application/javascript; charset=UTF-8',
+  '.json': 'application/json; charset=UTF-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
 };
 
-function sendJson(res, statusCode, data) {
-  res.writeHead(statusCode, {
-    'Content-Type': 'application/json; charset=UTF-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
-  });
+const SEC_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'same-origin',
+  'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'"
+};
+
+// ------------------------------------------------------------------ utilidades HTTP
+function sendJson(res, status, data, extra = {}) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=UTF-8', 'Cache-Control': 'no-store', ...SEC_HEADERS, ...extra });
   res.end(JSON.stringify(data));
 }
 
 function parseBody(req) {
   return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', chunk => { body += chunk.toString(); });
+    const chunks = [];
+    let size = 0;
+    req.on('data', c => {
+      size += c.length;
+      if (size > MAX_BODY) { reject(new HttpError(413, 'Requisição muito grande.')); req.destroy(); return; }
+      chunks.push(c);
+    });
     req.on('end', () => {
       try {
-        resolve(body ? JSON.parse(body) : {});
-      } catch (err) {
-        reject(err);
-      }
+        const s = Buffer.concat(chunks).toString('utf8');
+        resolve(s ? JSON.parse(s) : {});
+      } catch (e) { reject(new HttpError(400, 'Corpo da requisição inválido (JSON esperado).')); }
     });
     req.on('error', reject);
   });
 }
 
+function parseCookies(req) {
+  const out = {};
+  String(req.headers.cookie || '').split(';').forEach(p => {
+    const i = p.indexOf('=');
+    if (i > 0) out[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim());
+  });
+  return out;
+}
+
+const cookieHeader = (token, maxAge) =>
+  `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax${maxAge ? `; Max-Age=${maxAge}` : ''}`;
+const clearCookie = `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+
+// Limitação de tentativas de login (por e-mail+IP)
+const tentativas = new Map();
+function checarBloqueio(chave) {
+  const t = tentativas.get(chave);
+  if (t && t.ate > Date.now()) throw new HttpError(429, `Muitas tentativas. Aguarde ${Math.ceil((t.ate - Date.now()) / 1000)}s para tentar novamente.`);
+}
+function registrarFalha(chave) {
+  const t = tentativas.get(chave) || { n: 0, ate: 0 };
+  t.n++;
+  if (t.n >= 5) { t.ate = Date.now() + 60000; t.n = 0; }
+  tentativas.set(chave, t);
+}
+
+// ------------------------------------------------------------------ roteador
+const routes = [];
+function route(method, pattern, opts, handler) {
+  const keys = [];
+  const re = new RegExp('^' + pattern.replace(/:([a-z_]+)/gi, (_, k) => { keys.push(k); return '([^/]+)'; }) + '/?$');
+  routes.push({ method, re, keys, opts, handler });
+}
+const ok = (data = {}, status = 200) => ({ status, body: { success: true, ...data } });
+const hojeISO = () => db.util.dataISO();
+
+function exigir(ctx, perm) {
+  if (!can(ctx.user.perfil, perm)) throw new HttpError(403, 'Usuário sem permissão para esta operação.');
+}
+
+// ---------------- autenticação
+route('POST', '/api/auth/login', { public: true }, ctx => {
+  const { email, senha, lembrar } = ctx.body;
+  const chave = `${String(email || '').toLowerCase()}|${ctx.req.socket.remoteAddress}`;
+  checarBloqueio(chave);
+  let u;
+  try { u = db.authenticate(email, senha); } catch (e) {
+    if (e.status === 401) registrarFalha(chave);
+    logger.log('AVISO', 'login_falhou', { email: String(email || '').slice(0, 100), motivo: e.message });
+    throw e;
+  }
+  tentativas.delete(chave);
+  const s = db.createSession(u.id_usuario, lembrar);
+  logger.log('INFO', 'login', {}, u.email);
+  return { ...ok({ message: 'Login realizado com sucesso', user: db.publicUser(u), permissoes: listFor(db.nomePerfil(u.id_perfil)) }), headers: { 'Set-Cookie': cookieHeader(s.token, s.maxAgeSeg) } };
+});
+
+route('POST', '/api/auth/logout', { public: true }, ctx => {
+  const token = parseCookies(ctx.req)[COOKIE];
+  if (ctx.user) logger.log('INFO', 'logout', {}, ctx.user.email);
+  db.deleteSession(token);
+  return { ...ok({ message: 'Sessão encerrada.' }), headers: { 'Set-Cookie': clearCookie } };
+});
+
+route('GET', '/api/auth/me', { public: true }, ctx => {
+  if (!ctx.user) throw new HttpError(401, 'Sessão expirada. Faça login novamente.');
+  return ok({ user: ctx.user, permissoes: listFor(ctx.user.perfil), settings: db.getSettings(), hoje: hojeISO() });
+});
+
+route('POST', '/api/auth/forgot', { public: true }, ctx => {
+  const r = db.createResetToken(ctx.body.email);
+  if (r) {
+    // Sem servidor SMTP configurado, o link é registrado no console/log (simulação de envio de e-mail).
+    const link = `http://localhost:${PORT}/#reset=${r.token}`;
+    logger.log('INFO', 'redefinicao_senha_solicitada', { link }, r.user.email);
+    if (process.env.GESTFAST_QUIET !== '1') console.log(`[GestFast] Link de redefinição para ${r.user.email}: ${link}`);
+  }
+  return ok({ message: 'Se o e-mail estiver cadastrado, enviaremos um link de redefinição.' });
+});
+
+route('POST', '/api/auth/reset', { public: true }, ctx => {
+  const u = db.resetPassword(ctx.body.token, ctx.body.senha);
+  logger.log('INFO', 'senha_redefinida', {}, u.email);
+  return ok({ message: 'Senha redefinida com sucesso. Faça login com a nova senha.' });
+});
+
+route('POST', '/api/auth/change-password', {}, ctx => {
+  db.changePassword(ctx.user.id_usuario, ctx.body.senha_atual, ctx.body.nova_senha);
+  return ok({ message: 'Senha alterada com sucesso!' });
+});
+
+// ---------------- busca global
+route('GET', '/api/search', {}, ctx => ok({ results: db.buscaGlobal(ctx.query.q, perm => can(ctx.user.perfil, perm)) }));
+
+// ---------------- dashboard e dados de apoio
+route('GET', '/api/dashboard', { perm: 'dashboard:ver' }, ctx => {
+  const t0 = Date.now();
+  const data = db.getDashboardData(ctx.user);
+  return ok({ data, latencyMs: Date.now() - t0 });
+});
+route('GET', '/api/alerts', { perm: 'dashboard:ver' }, () => ok({ alerts: db.getAlertasCriticos() }));
+route('GET', '/api/categories', {}, () => ok({ categories: db.categorias }));
+route('GET', '/api/suppliers', {}, () => ok({ suppliers: db.fornecedores }));
+route('GET', '/api/profiles', { perm: 'usuarios:gerir' }, () => ok({ profiles: db.perfis }));
+route('GET', '/api/settings', {}, ctx => ok({ settings: db.getSettings(), hoje: hojeISO() }));
+route('PUT', '/api/settings', { perm: 'config:gerir' }, ctx => ok({ settings: db.updateSettings(ctx.body), message: 'Configurações salvas com sucesso!' }));
+route('GET', '/api/logs', { perm: 'logs:ver' }, ctx => ok({ logs: logger.recent(Math.min(Number(ctx.query.limit) || 200, 1000)) }));
+
+// ---------------- funcionários
+route('GET', '/api/users', { perm: 'usuarios:gerir' }, ctx => ok({ users: db.listUsers({ q: ctx.query.q, id_perfil: ctx.query.id_perfil, status: ctx.query.status }) }));
+route('POST', '/api/users', { perm: 'usuarios:gerir' }, ctx => {
+  const u = db.createUser(ctx.body);
+  return ok({ user: u, message: 'Funcionário cadastrado com sucesso!' }, 201);
+});
+route('PUT', '/api/users/:id', { perm: 'usuarios:gerir' }, ctx => ok({ user: db.updateUser(ctx.params.id, ctx.body, ctx.user), message: 'Funcionário atualizado com sucesso!' }));
+route('PATCH', '/api/users/:id/status', { perm: 'usuarios:gerir' }, ctx => {
+  const u = db.setUserStatus(ctx.params.id, ctx.body.status, ctx.user);
+  return ok({ user: u, message: u.status === 'Ativo' ? 'Acesso do funcionário reativado!' : 'Acesso do funcionário desativado com sucesso!' });
+});
+
+// ---------------- produtos
+function salvarImagem(dataUrl, idRef) {
+  const m = /^data:(image\/(png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
+  if (!m) throw erro('Imagem inválida. Envie um arquivo PNG, JPG, WEBP ou GIF.');
+  const buf = Buffer.from(m[3], 'base64');
+  if (buf.length > 2 * 1024 * 1024) throw erro('A imagem deve ter no máximo 2 MB.');
+  const ext = m[2] === 'jpeg' ? 'jpg' : m[2];
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  const nome = `prod-${idRef}-${Date.now()}.${ext}`;
+  fs.writeFileSync(path.join(UPLOAD_DIR, nome), buf);
+  return `uploads/${nome}`;
+}
+
+route('GET', '/api/products', { perm: 'produtos:ver' }, ctx => ok({ products: db.getProducts(ctx.query.q, ctx.query.category, ctx.query.status || 'Ativo') }));
+route('GET', '/api/products/:id', { perm: 'produtos:ver' }, ctx => {
+  const p = db.getProductById(ctx.params.id);
+  if (!p) throw new HttpError(404, 'Produto não encontrado');
+  return ok({ product: p });
+});
+route('POST', '/api/products', { perm: 'produtos:editar' }, ctx => {
+  const { imagem_data, ...dados } = ctx.body;
+  if (imagem_data) dados.imagem = salvarImagem(imagem_data, 'novo');
+  return ok({ product: db.saveProduct(dados), message: 'Produto cadastrado com sucesso!' }, 201);
+});
+route('PUT', '/api/products/:id', { perm: 'produtos:editar' }, ctx => {
+  const { imagem_data, ...dados } = ctx.body;
+  dados.id_produto = ctx.params.id;
+  if (imagem_data) dados.imagem = salvarImagem(imagem_data, ctx.params.id);
+  return ok({ product: db.saveProduct(dados), message: 'Produto atualizado com sucesso!' });
+});
+route('DELETE', '/api/products/:id', { perm: 'produtos:editar' }, ctx => {
+  db.setProductStatus(ctx.params.id, 'Inativo');
+  return ok({ message: 'Produto inativado do catálogo com sucesso!' });
+});
+route('PATCH', '/api/products/:id/status', { perm: 'produtos:editar' }, ctx => {
+  const p = db.setProductStatus(ctx.params.id, ctx.body.status);
+  return ok({ product: p, message: p.status === 'Ativo' ? 'Produto reativado no catálogo!' : 'Produto inativado do catálogo com sucesso!' });
+});
+
+// ---------------- requisições
+route('GET', '/api/requisitions', { perm: 'requisicoes:ver' }, () => ok({ requisicoes: db.requisicoes }));
+route('GET', '/api/requisitions/:id', { perm: 'requisicoes:ver' }, ctx => {
+  const r = db.getRequisicao(ctx.params.id);
+  if (!r) throw new HttpError(404, 'Requisição não encontrada');
+  return ok({ requisicao: r });
+});
+route('POST', '/api/requisitions', { perm: 'requisicoes:criar' }, ctx => ok({ requisicao: db.createRequisicao(ctx.body, ctx.user), message: 'Pedido realizado com sucesso' }, 201));
+route('PATCH', '/api/requisitions/:id/status', {}, ctx => {
+  const sit = ctx.body.situacao;
+  exigir(ctx, sit === 'Cancelado' ? 'requisicoes:cancelar' : sit === 'Finalizado' ? 'requisicoes:receber' : 'requisicoes:avancar');
+  const r = db.updateRequisicaoStatus(ctx.params.id, ctx.body, ctx.user);
+  const msg = sit === 'Cancelado' ? 'Solicitação de cancelamento encaminhada com sucesso'
+    : sit === 'Finalizado' ? (r.parcial ? 'Recebimento parcial registrado e estoque atualizado!' : 'Mercadoria recebida e estoque atualizado!')
+      : `Requisição atualizada para "${r.situacao}"!`;
+  return ok({ requisicao: r, message: msg });
+});
+
+// ---------------- movimentações
+route('GET', '/api/movements', { perm: 'movimentos:ver' }, ctx => ok({ movements: db.getMovimentacoes({ tipo: ctx.query.tipo, from: ctx.query.from, to: ctx.query.to }) }));
+route('POST', '/api/movements', { perm: 'movimentos:registrar' }, ctx => {
+  const movs = db.registrarMovimentacoes(ctx.body, ctx.user);
+  const tipo = ctx.body.tipo_movimentacao;
+  return ok({ movements: movs, movement: movs[0], message: movs.length > 1 ? `${tipo} em lote registrada (${movs.length} itens)!` : `${tipo} registrada com sucesso!` }, 201);
+});
+
+// ---------------- vendas
+route('GET', '/api/sales', { perm: 'vendas:ver' }, ctx => ok({ sales: db.getVendas({ from: ctx.query.from, to: ctx.query.to, q: ctx.query.q, status: ctx.query.status }) }));
+route('GET', '/api/sales/:id', { perm: 'vendas:ver' }, ctx => {
+  const v = db.getVenda(ctx.params.id);
+  if (!v) throw new HttpError(404, 'Venda não encontrada');
+  return ok({ sale: v });
+});
+route('POST', '/api/sales', { perm: 'vendas:vender' }, ctx => ok({ sale: db.realizarVenda(ctx.body, ctx.user), message: 'Venda realizada com sucesso' }, 201));
+route('PUT', '/api/sales/:id', { perm: 'vendas:editar' }, ctx => ok({ sale: db.editarVenda(ctx.params.id, ctx.body, ctx.user), message: 'Venda atualizada com sucesso' }));
+route('POST', '/api/sales/:id/cancel', { perm: 'vendas:cancelar' }, ctx => {
+  const aut = db.authorizeManager(ctx.body.autorizador_email, ctx.body.autorizador_senha);
+  const v = db.cancelarVenda(ctx.params.id, ctx.body, ctx.user, aut);
+  logger.log('INFO', 'venda_cancelada', { venda: v.codigo_venda, autorizadaPor: aut.email }, ctx.user.email);
+  return ok({ sale: v, message: 'Venda cancelada e estoque estornado!' });
+});
+route('DELETE', '/api/sales/:id', { perm: 'vendas:excluir' }, ctx => {
+  db.authorizeManager(ctx.body.autorizador_email, ctx.body.autorizador_senha, ['Administrador']);
+  const v = db.excluirVenda(ctx.params.id, ctx.user);
+  return ok({ message: 'Venda excluída com sucesso' , sale: v });
+});
+
+// ---------------- conferência
+route('GET', '/api/inventory', { perm: 'estoque:conferir' }, () => ok({ conferencias: db.conferencias, itensParaConferencia: db.produtos.filter(p => p.status === 'Ativo') }));
+route('POST', '/api/inventory', { perm: 'estoque:conferir' }, ctx => ok({ conferencia: db.salvarConferencia(ctx.body, ctx.user), message: 'Conferência de estoque salva com sucesso!' }, 201));
+
+// ---------------- relatórios (+ exportação PDF/XLSX)
+const brl = n => `R$ ${Number(n).toFixed(2).replace('.', ',')}`;
+const num = n => String(Number(n)).replace('.', ',');
+const dataBR = s => (s ? s.split('-').reverse().join('/') : '');
+function descPeriodo(f) {
+  const cat = f.categoria ? (db.categorias.find(c => c.id_categoria === f.categoria) || {}).nome_categoria : 'Todas as categorias';
+  const per = f.from || f.to ? `${f.from ? dataBR(f.from) : 'início'} a ${f.to ? dataBR(f.to) : 'hoje'}` : 'Todo o período';
+  return `Período: ${per}  |  Categoria: ${cat}`;
+}
+
+function entregarRelatorio(ctx, tipo, dados, montar) {
+  const formato = (ctx.query.format || 'json').toLowerCase();
+  db.registrarRelatorio(`${tipo} (${formato})`, ctx.user.id_usuario);
+  if (formato === 'json') return ok({ report: dados });
+  const m = montar(dados);
+  const stamp = `${hojeISO()}`;
+  if (formato === 'xlsx') {
+    return { raw: true, status: 200, headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="gestfast-${tipo}-${stamp}.xlsx"` }, body: buildXlsx(m.sheets) };
+  }
+  if (formato === 'pdf') {
+    return { raw: true, status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="gestfast-${tipo}-${stamp}.pdf"` }, body: buildPdf({ title: m.titulo, subtitle: m.subtitulo, sections: m.sections, footer: `GestFast - ${db.getSettings().estabelecimento} - gerado em ${db.util.dataHora()} por ${ctx.user.nome}`, landscape: m.landscape }) };
+  }
+  throw new HttpError(400, 'Formato inválido. Use json, pdf ou xlsx.');
+}
+
+route('GET', '/api/reports/sales', { perm: 'relatorios:ver' }, ctx => {
+  const r = db.getRelatorioVendas({ from: ctx.query.from, to: ctx.query.to, categoria: ctx.query.categoria });
+  return entregarRelatorio(ctx, 'vendas', r, d => {
+    const resumo = [
+      `${descPeriodo(d.filtros)}`,
+      `Transações: ${d.quantidadeTransacoes}  |  Bruto: ${brl(d.totalBruto)}  |  Descontos: ${brl(d.totalDescontos)}  |  Faturamento: ${brl(d.totalGeral)}  |  Ticket médio: ${brl(d.ticketMedio)}`
+    ];
+    const colItens = [{ label: 'Produto', width: 36 }, { label: 'Categoria', width: 24 }, { label: 'Unid', width: 8 }, { label: 'Valor médio', width: 14, fmt: 'money' }, { label: 'Quant.', width: 10, fmt: 'dec' }, { label: 'Total bruto', width: 14, fmt: 'money' }];
+    const linhasItens = d.itensVendidos.map(i => [i.nome_produto, i.categoria, i.unidade, i.valor_unitario, i.quantidade, i.total]);
+    const colTrans = [{ label: 'Venda', width: 14 }, { label: 'Data', width: 17 }, { label: 'Operador', width: 18 }, { label: 'Pagamento', width: 16 }, { label: 'Itens', width: 50 }, { label: 'Bruto', width: 12, fmt: 'money' }, { label: 'Desconto', width: 12, fmt: 'money' }, { label: 'Total', width: 12, fmt: 'money' }];
+    const linhasTrans = d.transacoes.map(t => [t.codigo_venda, t.data_venda, t.usuario_nome, t.forma_pagamento, t.itens_resumo, t.bruto, t.desconto, t.valor_total]);
+    const totalRow = Object.assign(['TOTAL', '', '', '', '', d.totalBruto, d.totalDescontos, d.totalGeral], { __bold: true });
+    return {
+      titulo: 'Relatório de Faturamento e Vendas', subtitulo: resumo, landscape: true,
+      sheets: [
+        { name: 'Vendidos por produto', title: 'Relatório de Faturamento e Vendas', subtitle: resumo[0], columns: colItens, rows: linhasItens },
+        { name: 'Transações', title: 'Transações do período', subtitle: resumo[1], columns: colTrans, rows: [...linhasTrans, totalRow] }
+      ],
+      sections: [
+        { heading: 'Produtos vendidos', columns: [{ label: 'Produto', w: 4 }, { label: 'Categoria', w: 3 }, { label: 'Unid', w: 1 }, { label: 'Valor médio', w: 2, align: 'right' }, { label: 'Quant.', w: 1.5, align: 'right' }, { label: 'Total bruto', w: 2, align: 'right' }],
+          rows: d.itensVendidos.map(i => [i.nome_produto, i.categoria, i.unidade, brl(i.valor_unitario), num(i.quantidade), brl(i.total)]) },
+        { heading: 'Transações', columns: [{ label: 'Venda', w: 2 }, { label: 'Data', w: 2.4 }, { label: 'Operador', w: 2.4 }, { label: 'Pagamento', w: 2.2 }, { label: 'Itens', w: 6 }, { label: 'Total', w: 2, align: 'right' }],
+          rows: [...d.transacoes.map(t => [t.codigo_venda, t.data_venda, t.usuario_nome, t.forma_pagamento, t.itens_resumo, brl(t.valor_total)]), Object.assign(['TOTAL', '', '', '', '', brl(d.totalGeral)], { __bold: true })] }
+      ]
+    };
+  });
+});
+
+route('GET', '/api/reports/stock', { perm: 'relatorios:ver' }, ctx => {
+  const r = db.getRelatorioEstoque({ from: ctx.query.from, to: ctx.query.to, categoria: ctx.query.categoria });
+  return entregarRelatorio(ctx, 'estoque', r, d => {
+    const sub = [descPeriodo(d.filtros), `Produtos: ${d.totalProdutos}  |  Em nível crítico: ${d.totalCriticos}  |  Valor em estoque (custo): ${brl(d.valorTotalEstoque)}`];
+    return {
+      titulo: 'Relatório de Estoque (entradas, saídas e saldo)', subtitulo: sub, landscape: true,
+      sheets: [{
+        name: 'Estoque', title: 'Relatório de Estoque', subtitle: sub[0],
+        columns: [{ label: 'Código', width: 12 }, { label: 'Produto', width: 36 }, { label: 'Categoria', width: 24 }, { label: 'Unid', width: 8 }, { label: 'Entradas', width: 11, fmt: 'dec' }, { label: 'Saídas', width: 11, fmt: 'dec' }, { label: 'Saldo atual', width: 12, fmt: 'dec' }, { label: 'Estoque mín.', width: 12, fmt: 'dec' }, { label: 'Valor em estoque', width: 16, fmt: 'money' }, { label: 'Situação', width: 11 }],
+        rows: d.linhas.map(l => [l.codigo_barras, l.nome_produto, l.categoria, l.unidade, l.entradas, l.saidas, l.saldo_atual, l.estoque_minimo, l.valor_em_estoque, l.situacao])
+      }],
+      sections: [{
+        columns: [{ label: 'Código', w: 1.6 }, { label: 'Produto', w: 4.5 }, { label: 'Categoria', w: 3 }, { label: 'Unid', w: 1 }, { label: 'Entradas', w: 1.4, align: 'right' }, { label: 'Saídas', w: 1.4, align: 'right' }, { label: 'Saldo', w: 1.4, align: 'right' }, { label: 'Mín.', w: 1.2, align: 'right' }, { label: 'Situação', w: 1.6 }],
+        rows: d.linhas.map(l => [l.codigo_barras, l.nome_produto, l.categoria, l.unidade, num(l.entradas), num(l.saidas), num(l.saldo_atual), num(l.estoque_minimo), l.situacao])
+      }]
+    };
+  });
+});
+
+// ------------------------------------------------------------------ servidor
 const server = http.createServer(async (req, res) => {
-  const parsedUrl = url.parse(req.url, true);
-  const pathname = parsedUrl.pathname;
+  const u = new URL(req.url, 'http://localhost');
+  const pathname = decodeURIComponent(u.pathname);
   const method = req.method;
 
-  if (method === 'OPTIONS') {
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
-    });
-    return res.end();
-  }
-
-  try {
-    // 1. Dashboard & Alertas
-    if (pathname === '/api/dashboard' && method === 'GET') {
-      const startTime = Date.now();
-      const dashData = await db.getDashboardData();
-      const latencyMs = Date.now() - startTime;
-      return sendJson(res, 200, { success: true, data: dashData, latencyMs });
-    }
-    if (pathname === '/api/alerts' && method === 'GET') {
-      return sendJson(res, 200, { success: true, alerts: await db.getAlertasCriticos() });
-    }
-
-    // 2. Categorias e Fornecedores
-    if (pathname === '/api/categories' && method === 'GET') {
-      return sendJson(res, 200, { success: true, categories: await db.getCategorias() });
-    }
-    if (pathname === '/api/suppliers' && method === 'GET') {
-      return sendJson(res, 200, { success: true, suppliers: await db.getFornecedores() });
-    }
-
-    // 3. Produtos (CRUD)
-    if (pathname === '/api/products' && method === 'GET') {
-      const { q, category } = parsedUrl.query;
-      return sendJson(res, 200, { success: true, products: await db.getProducts(q, category) });
-    }
-    if (pathname.startsWith('/api/products/') && method === 'GET') {
-      const id = pathname.split('/')[3];
-      const prod = await db.getProductById(id);
-      if (!prod) return sendJson(res, 404, { success: false, error: 'Produto não encontrado' });
-      return sendJson(res, 200, { success: true, product: prod });
-    }
-    if (pathname === '/api/products' && method === 'POST') {
-      const body = await parseBody(req);
-      const novo = await db.saveProduct(body);
-      return sendJson(res, 201, { success: true, product: novo, message: 'Produto cadastrado com sucesso!' });
-    }
-    if (pathname.startsWith('/api/products/') && method === 'PUT') {
-      const id = pathname.split('/')[3];
-      const body = await parseBody(req);
-      body.id_produto = id;
-      const atualizado = await db.saveProduct(body);
-      return sendJson(res, 200, { success: true, product: atualizado, message: 'Produto atualizado com sucesso!' });
-    }
-    if (pathname.startsWith('/api/products/') && method === 'DELETE') {
-      const id = pathname.split('/')[3];
-      await db.deleteProduct(id);
-      return sendJson(res, 200, { success: true, message: 'Produto inativado do catálogo com sucesso!' });
-    }
-
-    // 4. Requisições de Fornecedores
-    if (pathname === '/api/requisitions' && method === 'GET') {
-      return sendJson(res, 200, { success: true, requisicoes: await db.getRequisicoes() });
-    }
-    if (pathname.startsWith('/api/requisitions/') && pathname.split('/').length === 4 && method === 'GET') {
-      const id = pathname.split('/')[3];
-      const reqFound = await db.getRequisicaoById(id);
-      if (!reqFound) return sendJson(res, 404, { success: false, error: 'Requisição não encontrada' });
-      return sendJson(res, 200, { success: true, requisicao: reqFound });
-    }
-    if (pathname === '/api/requisitions' && method === 'POST') {
-      const body = await parseBody(req);
-      if (!body.produto_nome) {
-        return sendJson(res, 400, { success: false, error: 'O nome do produto é obrigatório.' });
+  if (pathname.startsWith('/api/')) {
+    try {
+      const rota = routes.find(r => r.method === method && r.re.test(pathname));
+      if (!rota) {
+        if (routes.some(r => r.re.test(pathname))) throw new HttpError(405, 'Método não permitido.');
+        throw new HttpError(404, 'Rota não encontrada.');
       }
-      const novaReq = await db.createRequisicao(body);
-      return sendJson(res, 201, { success: true, requisicao: novaReq, message: 'Requisição gerada com sucesso!' });
+      const m = rota.re.exec(pathname);
+      const params = {};
+      rota.keys.forEach((k, i) => { params[k] = m[i + 1]; });
+      const token = parseCookies(req)[COOKIE];
+      const dbUser = db.getSessionUser(token);
+      const user = dbUser ? db.publicUser(dbUser) : null;
+      if (!rota.opts.public && !user) throw new HttpError(401, 'Sessão expirada. Faça login novamente.');
+      const ctx = { req, res, params, query: Object.fromEntries(u.searchParams), user, body: {} };
+      if (user && rota.opts.perm) exigir(ctx, rota.opts.perm);
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) ctx.body = await parseBody(req);
+      const out = await rota.handler(ctx);
+      if (user && method !== 'GET' && !pathname.startsWith('/api/auth/')) {
+        logger.log('INFO', 'operacao', { metodo: method, rota: pathname }, user.email);
+      }
+      if (out && out.raw) {
+        res.writeHead(out.status, { ...SEC_HEADERS, ...out.headers });
+        return res.end(out.body);
+      }
+      return sendJson(res, out.status || 200, out.body, out.headers);
+    } catch (err) {
+      const status = err.status || 400;
+      if (status >= 500) logger.log('ERRO', 'falha_interna', { rota: pathname, erro: err.stack || String(err) });
+      else if (status === 401 || status === 403) logger.log('AVISO', 'acesso_negado', { rota: pathname, status, motivo: err.message });
+      return sendJson(res, status, { success: false, error: err.message || 'Erro no processamento da requisição' });
     }
-    if (pathname.match(/^\/api\/requisitions\/\d+\/status$/) && method === 'PATCH') {
-      const parts = pathname.split('/');
-      const id = parts[3];
-      const body = await parseBody(req);
-      const atualizada = await db.updateRequisicaoStatus(id, body.situacao, body.justificativa);
-      return sendJson(res, 200, { success: true, requisicao: atualizada, message: `Requisição atualizada para "${body.situacao}"!` });
-    }
-
-    // 5. Movimentações de Estoque (Entradas e Saídas)
-    if (pathname === '/api/movements' && method === 'GET') {
-      const list = await db.getMovimentacoes(parsedUrl.query.tipo);
-      return sendJson(res, 200, { success: true, movements: list });
-    }
-    if (pathname === '/api/movements' && method === 'POST') {
-      const body = await parseBody(req);
-      const novaMov = await db.registrarMovimentacaoEstoque(body);
-      return sendJson(res, 201, { success: true, movement: novaMov, message: `${body.tipo_movimentacao} registrada com sucesso!` });
-    }
-
-    // 6. Vendas / Balcão (PDV)
-    if (pathname === '/api/sales' && method === 'GET') {
-      return sendJson(res, 200, { success: true, sales: await db.getVendas() });
-    }
-    if (pathname === '/api/sales' && method === 'POST') {
-      const body = await parseBody(req);
-      const novaVenda = await db.realizarVenda(body);
-      return sendJson(res, 201, { success: true, sale: novaVenda, message: 'Venda realizada com sucesso e estoque baixado!' });
-    }
-    if (pathname.match(/^\/api\/sales\/\d+\/cancel$/) && method === 'POST') {
-      const id = pathname.split('/')[3];
-      const cancelada = await db.cancelarVenda(id);
-      return sendJson(res, 200, { success: true, sale: cancelada, message: 'Venda cancelada e estoque estornado!' });
-    }
-
-    // 7. Conferência de Inventário Físico
-    if (pathname === '/api/inventory' && method === 'GET') {
-      return sendJson(res, 200, {
-        success: true,
-        conferencias: await db.getConferencias(),
-        itensParaConferencia: await db.getProducts()
-      });
-    }
-    if (pathname === '/api/inventory' && method === 'POST') {
-      const body = await parseBody(req);
-      const conf = await db.salvarConferencia(body.responsavel, body.itens, body.observacao);
-      return sendJson(res, 201, { success: true, conferencia: conf, message: 'Conferência de estoque salva com sucesso!' });
-    }
-
-    // 8. Relatórios de Vendas e Desempenho
-    if (pathname === '/api/reports/sales' && method === 'GET') {
-      return sendJson(res, 200, { success: true, report: await db.getRelatorioVendas() });
-    }
-  } catch (err) {
-    return sendJson(res, 400, { success: false, error: err.message || 'Erro no processamento da requisição' });
   }
 
-  // Roteamento de Arquivos Estáticos (Frontend SPA)
-  let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
-  if (!filePath.startsWith(PUBLIC_DIR)) {
-    res.writeHead(403);
-    return res.end('Acesso Negado');
+  // Arquivos enviados (imagens de produtos)
+  if (pathname.startsWith('/uploads/')) {
+    const f = path.join(UPLOAD_DIR, path.basename(pathname));
+    return fs.readFile(f, (err, buf) => {
+      if (err) { res.writeHead(404, SEC_HEADERS); return res.end('Não encontrado'); }
+      res.writeHead(200, { 'Content-Type': MIME_TYPES[path.extname(f).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS });
+      res.end(buf);
+    });
   }
 
+  // Frontend estático (SPA)
+  const filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
+  if (!filePath.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end('Acesso Negado'); }
   fs.readFile(filePath, (err, content) => {
     if (err) {
-      fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (readErr, indexContent) => {
-        if (readErr) {
-          res.writeHead(404);
-          return res.end('Não encontrado');
-        }
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=UTF-8' });
-        res.end(indexContent);
+      if (path.extname(pathname)) { res.writeHead(404, SEC_HEADERS); return res.end('Não encontrado'); }
+      return fs.readFile(path.join(PUBLIC_DIR, 'index.html'), (e2, idx) => {
+        if (e2) { res.writeHead(404); return res.end('Não encontrado'); }
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=UTF-8', ...SEC_HEADERS });
+        res.end(idx);
       });
-      return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream', 'Cache-Control': 'no-cache', ...SEC_HEADERS });
     res.end(content);
   });
 });
 
 if (require.main === module) {
-  testarConexao()
-    .then(() => {
-      console.log(`[GestFast ERP] Conectado ao MySQL (banco "${process.env.DB_NAME || 'gestfast'}").`);
-      server.listen(PORT, () => {
-        console.log(`[GestFast ERP] Servidor rodando com sucesso em http://localhost:${PORT}`);
-      });
-    })
-    .catch(err => {
-      console.error(`[GestFast ERP] Não foi possível conectar ao MySQL: ${err.message}`);
-      console.error('Confira se o MySQL está ligado e se o arquivo .env está preenchido (veja .env.example).');
-      process.exit(1);
-    });
+  server.listen(PORT, () => {
+    console.log(`[GestFast ERP] Servidor rodando em http://localhost:${PORT}`);
+    console.log('[GestFast ERP] Dados em:', db.file);
+  });
 }
 
 module.exports = server;

@@ -4,12 +4,66 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GestFast - ERP Padaria Nova York</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231f2429'/%3E%3Ctext x='16' y='22' font-size='16' font-weight='700' text-anchor='middle' fill='%23f97316' font-family='Arial'%3EG%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Cabeçalho Superior Global Fiel ao Figma (Figuras 5, 7, 9, 11, 14, 15, 17, 19, 20) -->
+  <!-- ============================================== -->
+  <!-- TELA DE LOGIN (Caso de uso "Manter Login")     -->
+  <!-- ============================================== -->
+  <div id="login-screen" class="login-screen is-hidden">
+    <div class="login-card">
+      <div class="gestfast-logo login-logo"><span class="logo-gest">GEST</span><span class="logo-fast">FAST#</span></div>
+      <p class="login-sub">Gestão de estoque e vendas para panificadoras</p>
+
+      <form id="form-login" novalidate>
+        <div class="form-group">
+          <label for="login-email">E-mail</label>
+          <input type="email" id="login-email" autocomplete="username" placeholder="seu@email.com">
+        </div>
+        <div class="form-group">
+          <label for="login-senha">Senha</label>
+          <input type="password" id="login-senha" autocomplete="current-password" placeholder="Sua senha">
+        </div>
+        <label class="checkbox-label login-remember"><input type="checkbox" id="login-lembrar"> Manter-me conectado</label>
+        <div id="login-erro" class="login-erro is-hidden" role="alert"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="btn-login">Entrar</button>
+        <button type="button" class="link-btn" id="btn-esqueci">Esqueci minha senha</button>
+      </form>
+
+      <form id="form-forgot" class="is-hidden" novalidate>
+        <p class="login-help">Informe o e-mail cadastrado. Enviaremos um link para redefinir sua senha.</p>
+        <div class="form-group">
+          <label for="forgot-email">E-mail cadastrado</label>
+          <input type="email" id="forgot-email" placeholder="seu@email.com">
+        </div>
+        <div id="forgot-msg" class="login-erro login-ok is-hidden" role="status"></div>
+        <button type="submit" class="btn btn-primary btn-block">Enviar link de redefinição</button>
+        <button type="button" class="link-btn" data-voltar-login>Voltar ao login</button>
+      </form>
+
+      <form id="form-reset" class="is-hidden" novalidate>
+        <p class="login-help">Defina uma nova senha de acesso (mínimo 6 caracteres).</p>
+        <div class="form-group">
+          <label for="reset-senha">Nova senha</label>
+          <input type="password" id="reset-senha" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="reset-senha2">Confirmar nova senha</label>
+          <input type="password" id="reset-senha2" autocomplete="new-password">
+        </div>
+        <div id="reset-erro" class="login-erro is-hidden" role="alert"></div>
+        <button type="submit" class="btn btn-primary btn-block">Redefinir senha</button>
+        <button type="button" class="link-btn" data-voltar-login>Voltar ao login</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app-shell" class="app-shell is-hidden">
+  <!-- Cabeçalho Superior Global (Figuras 5, 7, 9, 11, 14, 15, 17, 19, 20) -->
   <header class="top-header">
     <div class="header-left">
+      <button class="nav-icon-circle-btn menu-toggle" id="btn-menu-toggle" aria-label="Abrir menu" title="Menu">☰</button>
       <div class="gestfast-logo" id="logo-header-home" title="Ir para o Início">
         <span class="logo-gest">GEST</span>
         <span class="logo-fast">FAST#</span>
@@ -19,11 +73,11 @@
       </button>
     </div>
 
-    <!-- Barra de Pesquisa Global de Navegação do Sistema com Predição (Requisito 8) -->
+    <!-- Barra de pesquisa global com predição -->
     <div class="search-container">
       <div class="search-input-wrapper">
         <span class="search-icon">🔍</span>
-        <input type="text" id="global-search" placeholder="Para onde deseja ir? (ex: estoque, vendas, requisições, cadastrar...)" autocomplete="off" aria-label="Buscar opções e telas do sistema" title="Buscar opções do sistema">
+        <input type="text" id="global-search" placeholder="Para onde deseja ir ou o que procura? (ex: estoque, pão, REQ-9661, venda...)" autocomplete="off" aria-label="Buscar opções e telas do sistema" title="Buscar opções do sistema">
         <span id="search-predictive-hint" class="search-ghost-hint"></span>
         <button id="search-clear-btn" class="clear-btn is-hidden" aria-label="Limpar pesquisa" title="Limpar pesquisa">&times;</button>
       </div>
@@ -33,72 +87,57 @@
       </div>
     </div>
 
-    <!-- Perfil do Usuário Fiel ao Figma (Avatar Preto Circular) -->
-    <div class="user-profile-header">
-      <div class="user-avatar-circle" title="Francisco (Proprietário)">
-        <span class="avatar-icon">👤</span>
-      </div>
-      <div class="user-info-text">
-        <span class="user-name">Francisco</span>
-        <span class="user-role">Proprietário</span>
+    <div class="header-right">
+      <div class="user-menu-wrap">
+        <button class="user-profile-header" id="user-menu-btn" aria-haspopup="true" aria-expanded="false" title="Menu do usuário" type="button">
+          <div class="user-avatar-circle" id="user-avatar"><span class="avatar-icon">👤</span></div>
+          <div class="user-info-text">
+            <span class="user-name" id="header-user-name">-</span>
+            <span class="user-role" id="header-user-role">-</span>
+          </div>
+        </button>
+        <div class="user-menu is-hidden" id="user-menu" role="menu">
+          <button role="menuitem" id="um-senha" type="button">🔑 Alterar minha senha</button>
+          <div class="user-menu-row"><span>Tamanho do texto</span><span class="user-menu-btns"><button class="a11y-btn" id="btn-font-minus" type="button" aria-label="Diminuir tamanho do texto">A-</button><button class="a11y-btn" id="btn-font-plus" type="button" aria-label="Aumentar tamanho do texto">A+</button></span></div>
+          <button role="menuitem" id="btn-contrast" type="button" aria-pressed="false">◐ Alto contraste</button>
+          <button role="menuitem" class="danger" id="btn-logout" type="button">⏻ Sair do sistema</button>
+        </div>
       </div>
     </div>
   </header>
 
   <div class="app-layout">
-    <!-- Menu Lateral Esquerdo Fiel aos Protótipos do Relatório -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <nav class="sidebar-nav">
-        <a href="#dashboard" class="nav-item active" data-view="dashboard">
-          <span class="nav-text">Início</span>
-        </a>
-        <a href="#estoque" class="nav-item" data-view="estoque">
-          <span class="nav-text">Verificar Estoque</span>
-        </a>
-        <a href="#requisicoes" class="nav-item" data-view="requisicoes">
-          <span class="nav-text">Requisição</span>
-        </a>
-        <a href="#cadastro" class="nav-item" data-view="cadastro">
-          <span class="nav-text">Cadastro de Produtos</span>
-        </a>
-        <a href="#saidas" class="nav-item" data-view="saidas">
-          <span class="nav-text">Saída de Produtos</span>
-        </a>
-        <a href="#entradas" class="nav-item" data-view="entradas">
-          <span class="nav-text">Entrada de Produtos</span>
-        </a>
-        <a href="#vendas" class="nav-item" data-view="vendas">
-          <span class="nav-text">Venda</span>
-        </a>
-        <a href="#relatorios" class="nav-item" data-view="relatorios">
-          <span class="nav-text">Relatórios</span>
-        </a>
+        <a href="#dashboard" class="nav-item active" data-view="dashboard" data-perm="dashboard:ver"><span class="nav-text">Início</span></a>
+        <a href="#estoque" class="nav-item" data-view="estoque" data-perm="estoque:conferir"><span class="nav-text">Verificar Estoque</span></a>
+        <a href="#requisicoes" class="nav-item" data-view="requisicoes" data-perm="requisicoes:ver"><span class="nav-text">Requisição</span></a>
+        <a href="#cadastro" class="nav-item" data-view="cadastro" data-perm="produtos:editar"><span class="nav-text">Cadastro de Produtos</span></a>
+        <a href="#saidas" class="nav-item" data-view="saidas" data-perm="movimentos:ver"><span class="nav-text">Saída de Produtos</span></a>
+        <a href="#entradas" class="nav-item" data-view="entradas" data-perm="movimentos:ver"><span class="nav-text">Entrada de Produtos</span></a>
+        <a href="#vendas" class="nav-item" data-view="vendas" data-perm="vendas:vender"><span class="nav-text">Venda</span></a>
+        <a href="#historico" class="nav-item" data-view="historico" data-perm="vendas:ver"><span class="nav-text">Histórico de Vendas</span></a>
+        <a href="#relatorios" class="nav-item" data-view="relatorios" data-perm="relatorios:ver"><span class="nav-text">Relatórios</span></a>
+        <a href="#funcionarios" class="nav-item" data-view="funcionarios" data-perm="usuarios:gerir"><span class="nav-text">Funcionários</span></a>
         <div class="sidebar-separator"></div>
-        <a href="#configuracoes" class="nav-item nav-secondary" data-view="configuracoes">
-          <span class="nav-text">Configuração</span>
-        </a>
-        <a href="#ajuda" class="nav-item nav-secondary" data-view="ajuda">
-          <span class="nav-text">Ajuda</span>
-        </a>
+        <a href="#configuracoes" class="nav-item nav-secondary" data-view="configuracoes"><span class="nav-text">Configuração</span></a>
+        <a href="#ajuda" class="nav-item nav-secondary" data-view="ajuda"><span class="nav-text">Ajuda</span></a>
       </nav>
       <div class="sidebar-footer">
-        <span class="footer-title">GestFast v1.2</span>
+        <span class="footer-title">GestFast v1.3</span>
         <span class="footer-desc">USCS - ADS</span>
       </div>
     </aside>
+    <div class="sidebar-scrim" id="sidebar-scrim"></div>
 
-    <!-- Área de Conteúdo Principal (Visões / Abas) -->
-    <main class="main-content">
-      
-      <!-- ============================================== -->
-      <!-- 1. ABA: DASHBOARD / INÍCIO (Figura 5 e Figura 4) -->
-      <!-- ============================================== -->
+    <main class="main-content" id="main-content">
+
+      <!-- 1. DASHBOARD -->
       <section id="view-dashboard" class="app-view active">
-        <!-- Indicador de Atualização em Tempo Real (Requisito 2) -->
         <div class="realtime-status-banner">
           <div class="status-indicator">
             <span class="live-dot"></span>
-            <span class="status-text"><strong>Sincronização em Tempo Real Ativa</strong> • Atualização periódica a cada 3s (Tempo de resposta do banco: ~12ms)</span>
+            <span class="status-text"><strong>Sincronização em Tempo Real Ativa</strong> • <span id="dash-interval-text">atualização periódica a cada 3s</span></span>
           </div>
           <div class="realtime-meta">
             <span id="dash-last-sync-time">Última checagem: agora</span>
@@ -106,52 +145,33 @@
           </div>
         </div>
 
-        <div class="figma-dashboard-grid">
-          <!-- Coluna Esquerda: Alertas (Topo) e Compras (Base) -->
-          <div class="figma-dash-left">
-            <!-- Bloco 1: Alertas (Sem "Necessita Solicitar", Requisito 1) -->
-            <div class="figma-card card-alertas">
-              <div class="figma-card-header">
-                <h2>Alertas</h2>
-              </div>
-              <div class="figma-card-body">
-                <div id="dash-alertas-figma-list" class="alertas-figma-list">
-                  <!-- Renderizado via app.js (ex: Pão de queijo 10, Café 20, Bolo 04) -->
-                </div>
-              </div>
-            </div>
+        <div id="dash-error" class="inline-error is-hidden" role="alert">Não foi possível carregar os gráficos no momento. Tente atualizar a página.</div>
 
-            <!-- Bloco 2: Compras Recentes (Figura 5) -->
+        <div class="figma-dashboard-grid">
+          <div class="figma-dash-left">
+            <div class="figma-card card-alertas">
+              <div class="figma-card-header"><h2>Alertas</h2></div>
+              <div class="figma-card-body"><div id="dash-alertas-figma-list" class="alertas-figma-list"></div></div>
+            </div>
             <div class="figma-card card-compras">
               <div class="figma-card-header">
                 <h2>Compras</h2>
-                <button class="btn btn-sm btn-primary" id="btn-dash-nova-requisicao">+ Nova Requisição</button>
+                <button class="btn btn-sm btn-primary" id="btn-dash-nova-requisicao" data-perm="requisicoes:criar">+ Nova Requisição</button>
               </div>
-              <div class="figma-card-body">
-                <div id="dash-compras-figma-list" class="compras-figma-list">
-                  <!-- Renderizado via app.js (ex: Café x50, Ovos x100, Farinha x20...) -->
-                </div>
-              </div>
+              <div class="figma-card-body"><div id="dash-compras-figma-list" class="compras-figma-list"></div></div>
             </div>
           </div>
-
-          <!-- Coluna Direita: Gráfico de Proporção em Tempo Real (Figura 5) -->
           <div class="figma-dash-right">
             <div class="figma-card card-grafico">
-              <div class="figma-card-header">
-                <h2>Distribuição de Estoque</h2>
-                <span class="live-pill-tag">Ao Vivo</span>
-              </div>
+              <div class="figma-card-header"><h2>Distribuição de Estoque</h2><span class="live-pill-tag">Ao Vivo</span></div>
               <div class="figma-card-body chart-body-wrapper">
-                <canvas id="stockDistributionCanvas" width="220" height="220"></canvas>
-                <div class="figma-chart-legend" id="dash-chart-legend">
-                  <!-- Legenda com percentuais calculados e dados dinâmicos -->
-                </div>
+                <canvas id="stockDistributionCanvas" width="220" height="220" role="img" aria-label="Gráfico de distribuição do estoque por categoria"></canvas>
+                <div class="figma-chart-legend" id="dash-chart-legend"></div>
               </div>
               <div class="figma-card-footer">
                 <div class="quick-shortcuts">
                   <button class="shortcut-pill" id="dash-btn-ir-estoque">📦 Abrir Estoque</button>
-                  <button class="shortcut-pill" id="dash-btn-ir-pdv">🛒 Abrir Caixa</button>
+                  <button class="shortcut-pill" id="dash-btn-ir-pdv" data-perm="vendas:vender">🛒 Abrir Caixa</button>
                   <button class="shortcut-pill" id="dash-btn-ir-requisicao">📝 Requisições</button>
                 </div>
               </div>
@@ -160,9 +180,7 @@
         </div>
       </section>
 
-      <!-- ============================================== -->
-      <!-- 2. ABA: VERIFICAR ESTOQUE (Figura 9)           -->
-      <!-- ============================================== -->
+      <!-- 2. VERIFICAR ESTOQUE -->
       <section id="view-estoque" class="app-view">
         <div class="figma-tab-header">
           <div class="figma-tab-title-pill">Verificar Estoque</div>
@@ -170,100 +188,58 @@
             <button class="btn btn-primary" id="btn-salvar-conferencia">💾 Salvar Conferência Física</button>
           </div>
         </div>
-
         <div class="figma-card full-panel">
           <div class="filter-toolbar">
-            <input type="text" id="estoque-filtro-termo" placeholder="Filtrar por descrição ou código..." class="input-search" aria-label="Filtrar estoque por termo" title="Filtrar por nome, código ou lote">
-            <select id="estoque-filtro-categoria" class="select-field" aria-label="Filtrar por Categoria" title="Filtrar por Categoria">
-              <option value="">Todas as Categorias</option>
-            </select>
-            <label class="checkbox-label">
-              <input type="checkbox" id="estoque-apenas-criticos"> Apenas nível crítico
-            </label>
+            <input type="text" id="estoque-filtro-termo" placeholder="Filtrar por descrição ou código..." class="input-search" aria-label="Filtrar estoque por termo">
+            <select id="estoque-filtro-categoria" class="select-field" aria-label="Filtrar por Categoria"><option value="">Todas as Categorias</option></select>
+            <label class="checkbox-label"><input type="checkbox" id="estoque-apenas-criticos"> Apenas nível crítico</label>
+            <span class="toolbar-hint is-hidden" id="estoque-resumo"></span>
+            <button class="btn btn-sm btn-secondary toolbar-end" id="btn-historico-conferencias" type="button">🕘 Histórico de conferências</button>
           </div>
-
-          <!-- Tabela Sem coluna de Sugestão de Compra (Requisito 3) -->
           <div class="table-responsive">
             <table class="figma-styled-table">
-              <thead>
-                <tr>
-                  <th>Descrição</th>
-                  <th>Unid</th>
-                  <th>Estoque</th>
-                  <th>Lote</th>
-                  <th>Contagem Física</th>
-                  <th>Divergência</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Descrição</th><th>Unid</th><th>Estoque</th><th>Lote</th><th>Contagem Física</th><th>Divergência</th></tr></thead>
               <tbody id="estoque-tabela-corpo"></tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- ============================================== -->
-      <!-- 3. ABA: REQUISIÇÃO (Figura 7)                  -->
-      <!-- ============================================== -->
+      <!-- 3. REQUISIÇÃO -->
       <section id="view-requisicoes" class="app-view">
         <div class="figma-tab-header">
           <div class="figma-tab-title-pill">Requisições</div>
-          <button class="btn btn-primary" id="btn-abrir-modal-req">+ Nova Requisição de Compra</button>
+          <button class="btn btn-primary" id="btn-abrir-modal-req" data-perm="requisicoes:criar">+ Nova Requisição de Compra</button>
         </div>
 
-        <!-- Card de Destaque / Formulário Rápido Fiel à Figura 7 -->
-        <div class="figma-card requisicao-figma-showcase">
+        <div class="figma-card requisicao-figma-showcase" id="req-showcase">
           <div class="req-top-info">
-            <div class="req-thumb-box">
-              <img src="assets/cafe.png" alt="Café Pilão" class="req-product-img" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'120\' height=\'120\' fill=\'%23a1a1aa\' viewBox=\'0 0 24 24\'><path d=\'M18 4H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-1 8h-4V7h4v5z\'/></svg>'">
-            </div>
+            <div class="req-thumb-box"><img id="showcase-img" alt="Produto da requisição" class="req-product-img"></div>
             <div class="req-details-grid">
-              <div class="req-supplier-badge" id="showcase-fornecedor">Empresa Pão e Açúcar Dist.</div>
+              <div class="req-supplier-badge" id="showcase-fornecedor">-</div>
               <div class="req-meta-columns">
-                <div class="meta-field">
-                  <span class="meta-label">Pedido:</span>
-                  <strong class="meta-val" id="showcase-produto-nome">Café Pilão 320g</strong>
-                </div>
-                <div class="meta-field">
-                  <span class="meta-label">Cód:</span>
-                  <span class="meta-val" id="showcase-codigo">9666</span>
-                </div>
-                <div class="meta-field">
-                  <span class="meta-label">QTDE. Ped:</span>
-                  <strong class="meta-val" id="showcase-qtd-ped">X50</strong>
-                </div>
-                <div class="meta-field">
-                  <span class="meta-label">QTDE Atendida:</span>
-                  <span class="meta-val" id="showcase-qtd-atend">X15</span>
-                </div>
-                <div class="meta-field">
-                  <span class="meta-label">UND:</span>
-                  <span class="meta-val" id="showcase-unidade">Pacote</span>
-                </div>
-                <div class="meta-field">
-                  <span class="meta-label">Situação:</span>
-                  <span class="badge-status-pill badge-warning" id="showcase-situacao">Em Aberto</span>
-                </div>
+                <div class="meta-field"><span class="meta-label">Pedido:</span><strong class="meta-val" id="showcase-produto-nome">-</strong></div>
+                <div class="meta-field"><span class="meta-label">Cód:</span><span class="meta-val" id="showcase-codigo">-</span></div>
+                <div class="meta-field"><span class="meta-label">QTDE. Ped:</span><strong class="meta-val" id="showcase-qtd-ped">-</strong></div>
+                <div class="meta-field"><span class="meta-label">QTDE Atendida:</span><span class="meta-val" id="showcase-qtd-atend">-</span></div>
+                <div class="meta-field"><span class="meta-label">UND:</span><span class="meta-val" id="showcase-unidade">-</span></div>
+                <div class="meta-field"><span class="meta-label">Situação:</span><span class="badge-status-pill badge-warning" id="showcase-situacao">-</span></div>
               </div>
             </div>
           </div>
-
-          <div class="req-middle-desc">
-            <p id="showcase-descricao">Com grãos selecionados e torra uniforme, o Café Pilão Tradicional garante aroma intenso e o melhor rendimento matinal na Padaria Nova York.</p>
-          </div>
-
+          <div class="req-middle-desc"><p id="showcase-descricao"></p></div>
           <div class="req-bottom-bar">
             <div class="req-address-data">
-              <span>Endereço de entrega: <strong>Padrão (Padaria Nova York)</strong></span>
-              <span>Data prevista: <strong id="showcase-data-entrega">18/09/2026</strong></span>
+              <span>Endereço de entrega: <strong id="showcase-endereco">-</strong></span>
+              <span>Data prevista: <strong id="showcase-data-entrega">-</strong></span>
             </div>
             <div class="req-financial-data">
-              <span>Valor Unit: <strong id="showcase-valor-unit">R$ 12,50</strong></span>
-              <span>Total: <strong id="showcase-valor-total" class="text-total-highlight">R$ 625,00</strong></span>
+              <span>Valor Unit: <strong id="showcase-valor-unit">-</strong></span>
+              <span>Total: <strong id="showcase-valor-total" class="text-total-highlight">-</strong></span>
             </div>
           </div>
         </div>
 
-        <!-- Tabela com Ações por Símbolos e Status Cancelado Clicável (Requisitos 4 e 7) -->
         <div class="figma-card full-panel">
           <div class="filter-toolbar">
             <span class="filter-label">Filtrar por Situação:</span>
@@ -272,32 +248,16 @@
             <button class="btn btn-sm btn-secondary filter-req-btn" data-status="Finalizado">Finalizado</button>
             <button class="btn btn-sm btn-secondary filter-req-btn" data-status="Cancelado">Cancelado</button>
           </div>
-
           <div class="table-responsive">
             <table class="figma-styled-table">
-              <thead>
-                <tr>
-                  <th>Nº Pedido</th>
-                  <th>Fornecedor</th>
-                  <th>Produto Solicitado</th>
-                  <th>Qtd.</th>
-                  <th>Unid</th>
-                  <th>Total R$</th>
-                  <th>Data</th>
-                  <th>Previsão</th>
-                  <th>Situação (Clique se Cancelado)</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Nº Pedido</th><th>Fornecedor</th><th>Produto Solicitado</th><th>Qtd.</th><th>Unid</th><th>Total R$</th><th>Data</th><th>Previsão</th><th>Situação</th><th>Ações</th></tr></thead>
               <tbody id="requisicoes-tabela-corpo"></tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- ============================================== -->
-      <!-- 4. ABA: CADASTRO DE PRODUTOS (Figura 11)        -->
-      <!-- ============================================== -->
+      <!-- 4. CADASTRO DE PRODUTOS -->
       <section id="view-cadastro" class="app-view">
         <div class="figma-tab-header">
           <div class="figma-tab-title-pill">Cadastro de Produto</div>
@@ -305,94 +265,46 @@
         </div>
 
         <div class="figma-cadastro-wrapper">
-          <!-- Coluna Formulário de Cadastro (Fiel à Figura 11) -->
           <div class="figma-card cadastro-card-box">
-            <form id="form-cadastro-produto">
+            <form id="form-cadastro-produto" novalidate>
               <input type="hidden" id="prod-id">
-
               <div class="cadastro-grid-figma">
-                <!-- Coluna 1 do Formulário -->
                 <div class="form-col-figma">
-                  <div class="figma-input-group">
-                    <label for="prod-nome">Nome do Produto *</label>
-                    <input type="text" id="prod-nome" class="figma-input" placeholder="Pão de Queijo" required>
-                  </div>
-                  <div class="figma-input-group">
-                    <label for="prod-codigo">Código</label>
-                    <input type="text" id="prod-codigo" class="figma-input" placeholder="78910001">
-                  </div>
-                  <div class="figma-input-group">
-                    <label for="prod-preco-custo">Preço custo</label>
-                    <input type="number" id="prod-preco-custo" class="figma-input" step="0.01" min="0" value="1.20" required>
-                  </div>
-                  <div class="figma-input-group">
-                    <label for="prod-preco-min">Preço Min</label>
-                    <input type="number" id="prod-preco-min" class="figma-input" step="0.01" min="0" value="2.50">
-                  </div>
-                  <div class="figma-input-group">
-                    <label for="prod-estoque-minimo">Estoque Min *</label>
-                    <input type="number" id="prod-estoque-minimo" class="figma-input" min="1" value="15" required>
-                  </div>
+                  <div class="figma-input-group"><label for="prod-nome">Nome do Produto *</label><input type="text" id="prod-nome" class="figma-input" placeholder="Pão de Queijo" maxlength="200"></div>
+                  <div class="figma-input-group"><label for="prod-codigo">Código</label><input type="text" id="prod-codigo" class="figma-input" placeholder="78910001" maxlength="100"></div>
+                  <div class="figma-input-group"><label for="prod-preco-custo">Preço custo</label><input type="number" id="prod-preco-custo" class="figma-input" step="0.01" min="0" placeholder="1.20"></div>
+                  <div class="figma-input-group"><label for="prod-preco-min">Preço Min</label><input type="number" id="prod-preco-min" class="figma-input" step="0.01" min="0" placeholder="2.50"></div>
+                  <div class="figma-input-group"><label for="prod-estoque-minimo">Estoque Min *</label><input type="number" id="prod-estoque-minimo" class="figma-input" min="0" step="1" placeholder="15"></div>
                 </div>
-
-                <!-- Coluna 2 do Formulário -->
                 <div class="form-col-figma">
-                  <div class="figma-input-group">
-                    <label for="prod-peso">Peso</label>
-                    <input type="text" id="prod-peso" class="figma-input" placeholder="50g">
-                  </div>
+                  <div class="figma-input-group"><label for="prod-peso">Peso</label><input type="text" id="prod-peso" class="figma-input" placeholder="50g" maxlength="30"></div>
                   <div class="figma-input-group">
                     <label for="prod-unidade">Unidade</label>
-                    <select id="prod-unidade" class="figma-input" required aria-label="Unidade de medida">
-                      <option value="UN">UN</option>
-                      <option value="KG">KG</option>
-                      <option value="Pacote">Pacote</option>
-                      <option value="DZ">DZ</option>
-                      <option value="Fatia">Fatia</option>
-                      <option value="Lt">Lt</option>
+                    <select id="prod-unidade" class="figma-input" aria-label="Unidade de medida">
+                      <option value="UN">UN</option><option value="KG">KG</option><option value="Pacote">Pacote</option>
+                      <option value="DZ">DZ</option><option value="Fatia">Fatia</option><option value="Lt">Lt</option>
                     </select>
                   </div>
-                  <div class="figma-input-group">
-                    <label for="prod-preco-venda">Preço Venda *</label>
-                    <input type="number" id="prod-preco-venda" class="figma-input" step="0.01" min="0.01" value="3.50" required>
-                  </div>
-                  <div class="figma-input-group">
-                    <label for="prod-preco-max">Preço Max</label>
-                    <input type="number" id="prod-preco-max" class="figma-input" step="0.01" min="0" value="5.00">
-                  </div>
-                  <div class="figma-input-group">
-                    <label for="prod-categoria">Categoria *</label>
-                    <select id="prod-categoria" class="figma-input" required aria-label="Categoria do produto"></select>
-                  </div>
+                  <div class="figma-input-group"><label for="prod-preco-venda">Preço Venda *</label><input type="number" id="prod-preco-venda" class="figma-input" step="0.01" min="0.01" placeholder="3.50"></div>
+                  <div class="figma-input-group"><label for="prod-preco-max">Preço Max</label><input type="number" id="prod-preco-max" class="figma-input" step="0.01" min="0" placeholder="5.00"></div>
+                  <div class="figma-input-group"><label for="prod-categoria">Categoria *</label><select id="prod-categoria" class="figma-input" aria-label="Categoria do produto"></select></div>
                 </div>
-
-                <!-- Coluna 3: Foto e Upload (Figura 11) -->
                 <div class="form-col-figma photo-col-figma">
-                  <div class="product-preview-frame">
-                    <img id="prod-preview-img" src="assets/pao_frances.png" alt="Foto do Produto" class="product-render-photo" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'160\' height=\'100\' fill=\'%23d97706\' viewBox=\'0 0 24 24\'><path d=\'M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19H19.65l-.62-1.39C20.26 16.07 21 14.12 21 12c0-4.97-4.03-9-9-9z\'/></svg>'">
-                  </div>
-                  <button type="button" class="btn-figma-upload" id="btn-upload-fake">📷 Upload image</button>
-                  <div class="figma-input-group extra-field">
-                    <label for="prod-estoque-atual">Estoque Atual Inicial</label>
-                    <input type="number" id="prod-estoque-atual" class="figma-input" min="0" value="10">
-                  </div>
-                  <div class="figma-input-group extra-field">
-                    <label for="prod-lote">Lote</label>
-                    <input type="text" id="prod-lote" class="figma-input" placeholder="546320">
-                  </div>
+                  <div class="product-preview-frame"><img id="prod-preview-img" alt="Foto do Produto" class="product-render-photo"></div>
+                  <input type="file" id="prod-imagem-file" accept="image/png,image/jpeg,image/webp,image/gif" class="is-hidden" aria-label="Selecionar imagem do produto">
+                  <button type="button" class="btn-figma-upload" id="btn-upload-img">📷 Upload image</button>
+                  <div class="figma-input-group extra-field"><label for="prod-estoque-atual">Estoque Atual Inicial</label><input type="number" id="prod-estoque-atual" class="figma-input" min="0" step="1" placeholder="10"></div>
+                  <div class="figma-input-group extra-field"><label for="prod-lote">Lote</label><input type="text" id="prod-lote" class="figma-input" placeholder="546320" maxlength="40"></div>
+                  <div class="figma-input-group extra-field"><label for="prod-validade">Validade</label><input type="date" id="prod-validade" class="figma-input"></div>
                 </div>
               </div>
 
-              <!-- Descrição com contador de caracteres (Requisito 5) -->
               <div class="figma-input-group desc-full-width">
                 <label for="prod-descricao">Descrição do Produto (Mínimo 10, Máximo 5000 caracteres)</label>
-                <textarea id="prod-descricao" rows="2" class="figma-input" minlength="10" maxlength="5000" placeholder="Insira os detalhes e características técnicas do produto..."></textarea>
-                <div class="counter-wrapper">
-                  <span id="prod-desc-counter" class="char-counter counter-invalid">0 / 5000 caracteres (mínimo 10)</span>
-                </div>
+                <textarea id="prod-descricao" rows="2" class="figma-input" maxlength="5000" placeholder="Insira os detalhes e características técnicas do produto..."></textarea>
+                <div class="counter-wrapper"><span id="prod-desc-counter" class="char-counter counter-neutral">0 / 5000 caracteres (mínimo 10)</span></div>
               </div>
 
-              <!-- Botões Inferiores Fiel à Figura 11: Confirmar, Salvar, Cancelar -->
               <div class="figma-bottom-actions">
                 <button type="submit" class="btn-figma-action action-confirm" id="btn-salvar-produto">✓ Confirmar</button>
                 <button type="button" class="btn-figma-action action-save" id="btn-save-draft">💾 Salvar</button>
@@ -401,23 +313,20 @@
             </form>
           </div>
 
-          <!-- Tabela Lateral de Consulta/Edição Rápida de Produtos -->
           <div class="figma-card cadastro-list-box">
             <h3>Buscar Produto Cadastrado</h3>
             <div class="search-mini-bar">
-              <input type="text" id="catalogo-busca-input" placeholder="Código ou Nome do Produto" class="figma-input" aria-label="Buscar produtos no catálogo" title="Buscar produtos">
+              <input type="text" id="catalogo-busca-input" placeholder="Código ou Nome do Produto" class="figma-input" aria-label="Buscar produtos no catálogo">
+            </div>
+            <div class="filter-toolbar mini-filters">
+              <select id="catalogo-filtro-categoria" class="select-field" aria-label="Filtrar catálogo por categoria"><option value="">Todas as categorias</option></select>
+              <select id="catalogo-filtro-status" class="select-field" aria-label="Filtrar catálogo por situação">
+                <option value="Ativo">Ativos</option><option value="Inativo">Inativos</option><option value="todos">Todos</option>
+              </select>
             </div>
             <div class="table-responsive small-table">
               <table class="figma-styled-table">
-                <thead>
-                  <tr>
-                    <th>Cód</th>
-                    <th>Produto</th>
-                    <th>Preço Venda</th>
-                    <th>Estoque</th>
-                    <th>Ações</th>
-                  </tr>
-                </thead>
+                <thead><tr><th>Cód</th><th>Produto</th><th>Preço Venda</th><th>Estoque</th><th>Ações</th></tr></thead>
                 <tbody id="catalogo-produtos-corpo"></tbody>
               </table>
             </div>
@@ -425,95 +334,77 @@
         </div>
       </section>
 
-      <!-- ============================================== -->
-      <!-- 5. ABA: SAÍDA DE PRODUTOS (Figura 14)          -->
-      <!-- ============================================== -->
+      <!-- 5. SAÍDA DE PRODUTOS -->
       <section id="view-saidas" class="app-view">
         <div class="figma-tab-header">
           <div class="figma-tab-title-pill">Saída de produtos</div>
-          <button class="btn btn-danger" id="btn-registrar-saida-modal">+ Registrar Nova Saída</button>
+          <button class="btn btn-danger" id="btn-registrar-saida-modal" data-perm="movimentos:registrar">+ Registrar Nova Saída</button>
         </div>
-
         <div class="figma-card full-panel">
+          <div class="filter-toolbar is-hidden">
+            <label class="inline-field">De <input type="date" id="saidas-de" class="select-field"></label>
+            <label class="inline-field">Até <input type="date" id="saidas-ate" class="select-field"></label>
+            <button class="btn btn-sm btn-secondary" id="saidas-limpar">Limpar filtros</button>
+            <span class="toolbar-hint" id="saidas-resumo"></span>
+          </div>
           <div class="table-responsive">
             <table class="figma-styled-table">
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Produto</th>
-                  <th>Cód</th>
-                  <th>Quant</th>
-                  <th>Unidade R$</th>
-                  <th>Total R$</th>
-                  <th>Motivo / Observação</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Data</th><th>Produto</th><th>Cód</th><th>Quant</th><th>Unidade R$</th><th>Total R$</th><th>Responsável</th><th>Motivo / Observação</th></tr></thead>
               <tbody id="saidas-tabela-corpo"></tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- ============================================== -->
-      <!-- 6. ABA: ENTRADA DE PRODUTOS (Figura 15)        -->
-      <!-- ============================================== -->
+      <!-- 6. ENTRADA DE PRODUTOS -->
       <section id="view-entradas" class="app-view">
         <div class="figma-tab-header">
           <div class="figma-tab-title-pill">Entrada de produtos</div>
-          <button class="btn btn-primary" id="btn-registrar-entrada-modal">+ Registrar Nova Entrada</button>
+          <button class="btn btn-primary" id="btn-registrar-entrada-modal" data-perm="movimentos:registrar">+ Registrar Nova Entrada</button>
         </div>
-
         <div class="figma-card full-panel">
+          <div class="filter-toolbar is-hidden">
+            <label class="inline-field">De <input type="date" id="entradas-de" class="select-field"></label>
+            <label class="inline-field">Até <input type="date" id="entradas-ate" class="select-field"></label>
+            <button class="btn btn-sm btn-secondary" id="entradas-limpar">Limpar filtros</button>
+            <span class="toolbar-hint" id="entradas-resumo"></span>
+          </div>
           <div class="table-responsive">
             <table class="figma-styled-table">
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Produto</th>
-                  <th>Cód</th>
-                  <th>Quant</th>
-                  <th>Unidade R$</th>
-                  <th>Total R$</th>
-                  <th>Origem / Fornecedor</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Data</th><th>Produto</th><th>Cód</th><th>Quant</th><th>Unidade R$</th><th>Total R$</th><th>Responsável</th><th>Origem / Fornecedor</th></tr></thead>
               <tbody id="entradas-tabela-corpo"></tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <!-- ============================================== -->
-      <!-- 7. ABA: VENDA / CAIXA PDV (Figura 19)          -->
-      <!-- ============================================== -->
+      <!-- 7. VENDA / CAIXA PDV -->
       <section id="view-vendas" class="app-view">
         <div class="figma-tab-header">
           <div class="figma-tab-title-pill">Venda</div>
-          <span class="badge-status-pill badge-info">Atendente: <strong>Henry Sena</strong></span>
+          <span class="badge-status-pill badge-info">Atendente: <strong id="pdv-atendente">-</strong></span>
         </div>
 
-        <!-- Layout Fiel à Figura 19 do Relatório (Sidebar interna escura com botões) -->
         <div class="figma-venda-layout">
-          <!-- Coluna Esquerda: Menu de Operações Escuro (Adicionar, Remover, Desconto) -->
           <div class="venda-dark-sidebar">
-            <button class="venda-dark-btn active" id="pdv-btn-abrir-adicionar">Adicionar Item</button>
-            <button class="venda-dark-btn" id="pdv-btn-remover-item-modo">Remover Item</button>
-            <button class="venda-dark-btn" id="pdv-btn-abrir-desconto">Aplicar Desconto</button>
-            
+            <button class="venda-dark-btn active" id="pdv-btn-abrir-adicionar" type="button">Adicionar Item</button>
+            <button class="venda-dark-btn" id="pdv-btn-remover-item-modo" type="button" title="Remove o item selecionado na lista (ou o último adicionado)">Remover Item</button>
+            <button class="venda-dark-btn" id="pdv-btn-abrir-desconto" type="button">Aplicar Desconto</button>
+
             <div class="venda-product-picker-box">
+              <label for="pdv-busca-codigo" class="venda-picker-label">Código de barras / nome:</label>
+              <input type="text" id="pdv-busca-codigo" class="figma-input-dark" placeholder="Digite e pressione Enter" autocomplete="off">
+
               <label for="pdv-produto-select" class="venda-picker-label">Produto:</label>
-              <select id="pdv-produto-select" class="figma-select-dark" aria-label="Selecione o produto para a venda">
-                <option value="">Selecione...</option>
-              </select>
+              <select id="pdv-produto-select" class="figma-select-dark" aria-label="Selecione o produto para a venda"><option value="">Selecione...</option></select>
 
               <div class="venda-picker-row">
                 <div class="picker-col">
                   <label for="pdv-quantidade" class="venda-picker-label">Quant.:</label>
-                  <input type="number" id="pdv-quantidade" class="figma-input-dark" min="0.1" step="0.1" value="1">
+                  <input type="number" id="pdv-quantidade" class="figma-input-dark" min="1" step="1" value="1" inputmode="numeric">
                 </div>
                 <div class="picker-col">
-                  <label class="venda-picker-label">Disponível:</label>
-                  <!-- Estoque decrementado reativamente (Requisito 6) -->
+                  <span class="venda-picker-label">Disponível:</span>
                   <div id="pdv-estoque-disponivel" class="stock-live-badge">--</div>
                 </div>
               </div>
@@ -522,136 +413,189 @@
                 <div class="picker-col">
                   <label for="pdv-forma-pagamento" class="venda-picker-label">Pagamento:</label>
                   <select id="pdv-forma-pagamento" class="figma-select-dark" aria-label="Forma de Pagamento">
-                    <option value="Dinheiro">Dinheiro</option>
-                    <option value="Cartão Débito">Cartão Débito</option>
-                    <option value="Cartão Crédito">Cartão Crédito</option>
-                    <option value="PIX">PIX</option>
+                    <option value="Dinheiro">Dinheiro</option><option value="Cartão Débito">Cartão Débito</option>
+                    <option value="Cartão Crédito">Cartão Crédito</option><option value="PIX">PIX</option>
                   </select>
                 </div>
                 <div class="picker-col">
-                  <label for="pdv-desconto" class="venda-picker-label">Desconto R$:</label>
-                  <input type="number" id="pdv-desconto" class="figma-input-dark" min="0" step="0.5" value="0.00">
+                  <label for="pdv-desconto" class="venda-picker-label">Desconto:</label>
+                  <div class="desc-inline">
+                    <input type="number" id="pdv-desconto" class="figma-input-dark" min="0" step="0.01" value="0">
+                    <select id="pdv-desconto-tipo" class="figma-select-dark" aria-label="Tipo de desconto"><option value="valor">R$</option><option value="percentual">%</option></select>
+                  </div>
                 </div>
               </div>
 
-              <button class="btn-figma-add" id="pdv-btn-adicionar-item">➕ Inserir no Pedido</button>
-              <button class="btn-figma-clear" id="pdv-btn-limpar-carrinho">Limpar Venda</button>
+              <div class="venda-picker-row" id="pdv-recebido-row">
+                <div class="picker-col">
+                  <label for="pdv-recebido" class="venda-picker-label">Valor recebido R$:</label>
+                  <input type="number" id="pdv-recebido" class="figma-input-dark" min="0" step="0.01" placeholder="opcional">
+                </div>
+                <div class="picker-col">
+                  <span class="venda-picker-label">Troco:</span>
+                  <div id="pdv-troco" class="stock-live-badge">--</div>
+                </div>
+              </div>
+
+              <button class="btn-figma-add" id="pdv-btn-adicionar-item" type="button">➕ Inserir no Pedido</button>
+              <button class="btn-figma-clear" id="pdv-btn-limpar-carrinho" type="button">Limpar Venda</button>
             </div>
           </div>
 
-          <!-- Coluna Central: Tabela de Itens da Venda Fiel à Figura 19 -->
           <div class="venda-center-panel figma-card">
             <h2 class="venda-center-title">Venda</h2>
             <div class="table-responsive">
               <table class="figma-styled-table venda-table">
-                <thead>
-                  <tr>
-                    <th>Produto</th>
-                    <th>Valor</th>
-                    <th>Quant.</th>
-                    <th>Total</th>
-                    <th>Remover</th>
-                  </tr>
-                </thead>
-                <tbody id="pdv-carrinho-corpo">
-                  <!-- Linhas dos produtos adicionados -->
-                </tbody>
+                <thead><tr><th>Produto</th><th>Valor</th><th>Quant.</th><th>Total</th><th>Remover</th></tr></thead>
+                <tbody id="pdv-carrinho-corpo"></tbody>
               </table>
             </div>
-
-            <!-- Total Fiel à Figura 19 (R$: 35,50 no canto inferior direito) -->
             <div class="venda-total-footer">
-              <div class="total-display-group">
-                <span class="total-figma-label">R$:</span>
-                <span class="total-figma-number" id="pdv-total-final">0,00</span>
-              </div>
-              <button class="btn-finalizar-checkout" id="pdv-btn-finalizar-venda">Finalizar Venda & Baixar Estoque</button>
+              <div class="venda-totals-lines" id="pdv-linhas-totais"></div>
+              <div class="total-display-group"><span class="total-figma-label">R$:</span><span class="total-figma-number" id="pdv-total-final">0,00</span></div>
+              <button class="btn-finalizar-checkout" id="pdv-btn-finalizar-venda" type="button">Finalizar Venda & Baixar Estoque</button>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ============================================== -->
-      <!-- 8. ABA: RELATÓRIOS DO DIA (Figura 17)          -->
-      <!-- ============================================== -->
+      <!-- 8. HISTÓRICO DE VENDAS -->
+      <section id="view-historico" class="app-view">
+        <div class="figma-tab-header"><div class="figma-tab-title-pill">Histórico de Vendas</div></div>
+        <div class="figma-card full-panel">
+          <div class="filter-toolbar">
+            <label class="inline-field">De <input type="date" id="hist-de" class="select-field"></label>
+            <label class="inline-field">Até <input type="date" id="hist-ate" class="select-field"></label>
+            <input type="text" id="hist-busca" class="input-search" placeholder="Venda, produto ou operador..." aria-label="Buscar vendas">
+            <select id="hist-status" class="select-field" aria-label="Filtrar por situação">
+              <option value="">Todas</option><option value="Concluída">Concluídas</option><option value="Cancelada">Canceladas</option>
+            </select>
+            <button class="btn btn-sm btn-secondary" id="hist-limpar">Hoje</button>
+            <span class="toolbar-hint" id="hist-resumo"></span>
+          </div>
+          <div class="table-responsive">
+            <table class="figma-styled-table">
+              <thead><tr><th>Venda</th><th>Data</th><th>Operador</th><th>Pagamento</th><th>Itens</th><th>Total</th><th>Situação</th><th>Ações</th></tr></thead>
+              <tbody id="hist-tabela-corpo"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9. RELATÓRIOS -->
       <section id="view-relatorios" class="app-view">
         <div class="figma-tab-header">
           <div class="figma-tab-title-pill">Relatórios</div>
-          <div class="tab-header-actions">
-            <button class="btn btn-secondary" id="btn-exportar-pdf">📄 Exportar PDF</button>
-            <button class="btn btn-secondary" id="btn-exportar-excel">📊 Exportar Excel</button>
+          <div class="tab-header-actions rel-header-actions">
+            <div class="rel-tabs" role="tablist">
+              <button class="rel-tab active" role="tab" data-rel="vendas" type="button">Vendas</button>
+              <button class="rel-tab" role="tab" data-rel="estoque" type="button">Estoque</button>
+            </div>
+            <label class="inline-field">De <input type="date" id="rel-de" class="select-field"></label>
+            <label class="inline-field">Até <input type="date" id="rel-ate" class="select-field"></label>
+            <button class="btn btn-primary is-hidden" id="btn-gerar-relatorio" type="button">Gerar</button>
+            <button class="btn btn-secondary" id="btn-exportar-pdf" type="button">📄 Exportar PDF</button>
+            <button class="btn btn-secondary" id="btn-exportar-excel" type="button">📊 Exportar Excel</button>
           </div>
         </div>
 
-        <!-- Layout Fiel à Figura 17 (Menu lateral escuro com categorias e tabela à direita) -->
         <div class="figma-relatorio-layout">
-          <!-- Coluna Esquerda: Categorias em fundo preto (#1f2429) -->
-          <div class="relatorio-dark-sidebar">
-            <div class="rel-cat-item active" data-cat="Geral">Geral</div>
-            <div class="rel-cat-item" data-cat="Bala">Bala</div>
-            <div class="rel-cat-item" data-cat="Chocolate">Chocolate</div>
-            <div class="rel-cat-item" data-cat="Requeijão">Requeijão</div>
-            <div class="rel-cat-item" data-cat="Leite">Leite</div>
-            <div class="rel-cat-item" data-cat="Ovos">Ovos</div>
-            <div class="rel-cat-item" data-cat="Farinha">Farinha</div>
-            <div class="rel-cat-item" data-cat="Pão Frances">Pão Frances</div>
-            <div class="rel-cat-item" data-cat="Pão doce">Pão doce</div>
-            <div class="rel-cat-item" data-cat="Suco Uva">Suco Uva</div>
-            <div class="rel-cat-item" data-cat="Bolo">Bolo</div>
-          </div>
+          <div class="relatorio-dark-sidebar" id="rel-categorias"></div>
 
-          <!-- Coluna Direita: Tabela "Vendidos no Dia" Fiel à Figura 17 -->
           <div class="relatorio-center-panel figma-card">
-            <h2 class="relatorio-center-title">Vendidos no Dia</h2>
+            <h2 class="relatorio-center-title" id="rel-titulo">Vendidos no Dia</h2>
+            <p class="rel-resumo" id="rel-kpis"></p>
             <div class="table-responsive">
               <table class="figma-styled-table relatorio-table">
-                <thead>
-                  <tr>
-                    <th>Produto</th>
-                    <th>Valor</th>
-                    <th>Quant.</th>
-                    <th>Total</th>
-                  </tr>
-                </thead>
-                <tbody id="relatorio-vendas-tabela">
-                  <!-- Renderizado via app.js com os itens da Figura 17 -->
-                </tbody>
+                <thead id="rel-thead"></thead>
+                <tbody id="relatorio-vendas-tabela"></tbody>
               </table>
             </div>
-
-            <!-- Total Fiel à Figura 17 (R$: 984,00 no canto inferior direito) -->
-            <div class="relatorio-total-footer">
-              <div class="total-display-group">
-                <span class="total-figma-label">R$:</span>
-                <span class="total-figma-number" id="rel-total-faturamento">984,00</span>
-              </div>
+            <div class="relatorio-total-footer" id="rel-footer">
+              <div class="rel-pagamentos" id="rel-pagamentos"></div>
+              <div class="total-display-group"><span class="total-figma-label">R$:</span><span class="total-figma-number" id="rel-total-faturamento">0,00</span></div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ============================================== -->
-      <!-- 9. ABA: CONFIGURAÇÕES E 10. AJUDA             -->
-      <!-- ============================================== -->
-      <section id="view-configuracoes" class="app-view">
+      <!-- 10. FUNCIONÁRIOS -->
+      <section id="view-funcionarios" class="app-view">
         <div class="figma-tab-header">
-          <div class="figma-tab-title-pill">Configuração</div>
+          <div class="figma-tab-title-pill">Funcionários</div>
+          <button class="btn btn-primary" id="btn-novo-funcionario">+ Cadastrar Funcionário</button>
         </div>
         <div class="figma-card full-panel">
-          <h3>Parâmetros Operacionais da Padaria Nova York</h3>
-          <div class="config-details-list">
-            <label><strong>Estabelecimento:</strong> Padaria Nova York - São Caetano do Sul (SP)</label>
-            <label><strong>Intervalo de Atualização em Tempo Real:</strong> 3.0 segundos (Polling reativo otimizado para não sobrecarregar I/O e conexões do MySQL)</label>
-            <label><strong>Validação de Justificativas:</strong> Mínimo de 10 caracteres e máximo de 5000 caracteres</label>
-            <label><strong>Operador Ativo:</strong> Henry Sena (USCS - ADS)</label>
+          <div class="filter-toolbar">
+            <input type="text" id="func-busca" class="input-search" placeholder="Filtrar por nome, login ou cargo..." aria-label="Filtrar funcionários">
+            <select id="func-perfil" class="select-field" aria-label="Filtrar por perfil"><option value="">Todos os perfis</option></select>
+            <select id="func-status" class="select-field" aria-label="Filtrar por situação">
+              <option value="">Todas as situações</option><option value="Ativo">Ativos</option><option value="Inativo">Inativos</option>
+            </select>
+            <span class="toolbar-hint" id="func-resumo"></span>
+          </div>
+          <div class="table-responsive">
+            <table class="figma-styled-table">
+              <thead><tr><th>Nome</th><th>Login (e-mail)</th><th>Cargo</th><th>Perfil</th><th>Situação</th><th>Ações</th></tr></thead>
+              <tbody id="func-tabela-corpo"></tbody>
+            </table>
           </div>
         </div>
       </section>
 
-      <section id="view-ajuda" class="app-view">
-        <div class="figma-tab-header">
-          <div class="figma-tab-title-pill">Ajuda</div>
+      <!-- 11. CONFIGURAÇÕES -->
+      <section id="view-configuracoes" class="app-view">
+        <div class="figma-tab-header"><div class="figma-tab-title-pill">Configuração</div></div>
+
+        <div class="figma-card full-panel" id="cfg-parametros-card">
+          <h3>Parâmetros Operacionais</h3>
+          <form id="form-config" class="config-form" novalidate>
+            <div class="form-group"><label for="cfg-estabelecimento">Estabelecimento</label><input type="text" id="cfg-estabelecimento" maxlength="150"></div>
+            <div class="form-row">
+              <div class="form-group flex-1"><label for="cfg-desconto">Desconto máximo no caixa (% do subtotal)</label><input type="number" id="cfg-desconto" min="0" max="100" step="1"></div>
+              <div class="form-group flex-1"><label for="cfg-intervalo">Atualização do painel (segundos)</label><input type="number" id="cfg-intervalo" min="2" max="60" step="1"></div>
+            </div>
+            <fieldset class="cfg-sim">
+              <legend>Simulação de falhas externas (para testes e demonstração)</legend>
+              <label class="checkbox-label"><input type="checkbox" id="cfg-sim-cartao"> Operadora de cartão nega as transações</label>
+              <label class="checkbox-label"><input type="checkbox" id="cfg-sim-fornecedor"> Sistema do fornecedor fora do ar</label>
+            </fieldset>
+            <button type="submit" class="btn btn-primary">💾 Salvar parâmetros</button>
+          </form>
+          <div class="config-details-list is-hidden" id="cfg-readonly"></div>
         </div>
+
+        <div class="figma-card full-panel">
+          <h3>Minha conta</h3>
+          <p class="cfg-p" id="cfg-minha-conta"></p>
+          <button class="btn btn-secondary" id="btn-alterar-senha">🔑 Alterar minha senha</button>
+        </div>
+
+        <div class="figma-card full-panel">
+          <h3>Acessibilidade</h3>
+          <p class="cfg-p">Ajuste o tamanho do texto e o contraste. As preferências ficam salvas neste dispositivo.</p>
+          <div class="a11y-cfg">
+            <button class="btn btn-secondary" id="cfg-font-minus">A- Diminuir texto</button>
+            <button class="btn btn-secondary" id="cfg-font-plus">A+ Aumentar texto</button>
+            <button class="btn btn-secondary" id="cfg-contrast">◐ Alto contraste</button>
+            <button class="btn btn-secondary" id="cfg-a11y-reset">Restaurar padrão</button>
+          </div>
+        </div>
+
+        <div class="figma-card full-panel" id="cfg-logs-card">
+          <div class="figma-card-header"><h3>Registro de atividades (logs)</h3><button class="btn btn-sm btn-secondary" id="btn-atualizar-logs">🔄 Atualizar</button></div>
+          <div class="table-responsive small-table tall">
+            <table class="figma-styled-table">
+              <thead><tr><th>Data/hora</th><th>Nível</th><th>Evento</th><th>Usuário</th><th>Detalhes</th></tr></thead>
+              <tbody id="logs-tabela-corpo"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 12. AJUDA -->
+      <section id="view-ajuda" class="app-view">
+        <div class="figma-tab-header"><div class="figma-tab-title-pill">Ajuda</div></div>
         <div class="figma-card full-panel">
           <h3>GestFast - Sistema de Gestão de Estoque Ágil para Padarias</h3>
           <div class="ajuda-details-list">
@@ -661,170 +605,129 @@
             <p><strong>Foco:</strong> Solução ágil para conferência e controle de estoque de panificadoras locais de bairro.</p>
           </div>
         </div>
+        <div class="figma-card full-panel">
+          <h3>Perfis de acesso</h3>
+          <div class="table-responsive">
+            <table class="figma-styled-table">
+              <thead><tr><th>Área</th><th>Administrador</th><th>BackOffice</th><th>Funcionário</th></tr></thead>
+              <tbody>
+                <tr><td>Painel, estoque, conferência, entradas e saídas</td><td>✔</td><td>✔</td><td>✔</td></tr>
+                <tr><td>Requisições: criar, receber e cancelar</td><td>✔</td><td>✔</td><td>✔</td></tr>
+                <tr><td>Requisições: cotar e gerar AF</td><td>✔</td><td>✔</td><td>-</td></tr>
+                <tr><td>Cadastro de produtos</td><td>✔</td><td>✔</td><td>-</td></tr>
+                <tr><td>Caixa (vendas), edição e cancelamento*</td><td>✔</td><td>-</td><td>✔</td></tr>
+                <tr><td>Relatórios (PDF e Excel)</td><td>✔</td><td>✔</td><td>-</td></tr>
+                <tr><td>Funcionários, configurações e logs</td><td>✔</td><td>-</td><td>-</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="cfg-p">* O cancelamento de uma venda exige e-mail e senha de um Administrador ou BackOffice.</p>
+        </div>
+        <div class="figma-card full-panel">
+          <h3>Dicas rápidas</h3>
+          <div class="ajuda-details-list">
+            <p>• Use a barra de pesquisa no topo para ir direto a qualquer tela (ex.: digite "venda").</p>
+            <p>• No caixa, digite ou leia o código de barras e pressione Enter para localizar o produto.</p>
+            <p>• Produtos vendidos por unidade, pacote, dúzia ou fatia só aceitam quantidades inteiras; apenas KG e litro aceitam frações.</p>
+            <p>• Os botões A-, A+ e ◐ no topo aumentam o texto e ativam o alto contraste.</p>
+          </div>
+        </div>
       </section>
-
     </main>
   </div>
+  </div>
 
-  <!-- MODAL: Nova Requisição de Fornecedor (Sem botão cancelar, fornecedores em lista suspensa - Requisito 4) -->
-  <div id="modal-requisicao" class="modal-backdrop is-hidden">
+  <!-- MODAIS ESTÁTICOS -->
+  <div id="modal-requisicao" class="modal-backdrop is-hidden" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-req">
     <div class="modal-box">
-      <div class="modal-header">
-        <h3>Nova Requisição de Fornecedor</h3>
-        <button class="modal-close" id="btn-fechar-modal-req" aria-label="Fechar modal" title="Fechar">&times;</button>
-      </div>
-      <form id="form-requisicao-modal">
-        <div class="form-group">
-          <label for="modal-req-produto">Produto *</label>
-          <select id="modal-req-produto" required aria-label="Produto da requisição"></select>
-        </div>
+      <div class="modal-header"><h3 id="titulo-modal-req">Nova Requisição de Fornecedor</h3><button class="modal-close" id="btn-fechar-modal-req" aria-label="Fechar" title="Fechar">&times;</button></div>
+      <form id="form-requisicao-modal" novalidate>
+        <div class="form-group"><label for="modal-req-produto">Produto *</label><select id="modal-req-produto" aria-label="Produto da requisição"></select></div>
         <div class="form-row">
-          <div class="form-group flex-2">
-            <label for="modal-req-quantidade">Quantidade *</label>
-            <input type="number" id="modal-req-quantidade" min="1" value="20" required>
-          </div>
-          <div class="form-group flex-1">
-            <label for="modal-req-unidade">Unidade</label>
-            <input type="text" id="modal-req-unidade" value="Pacote" readonly>
-          </div>
+          <div class="form-group flex-2"><label for="modal-req-quantidade">Quantidade *</label><input type="number" id="modal-req-quantidade" min="1" step="1" value="20"></div>
+          <div class="form-group flex-1"><label for="modal-req-unidade">Unidade</label><input type="text" id="modal-req-unidade" value="-" readonly></div>
         </div>
-        <!-- Lista suspensa com fornecedores predefinidos (Requisito 4) -->
-        <div class="form-group">
-          <label for="modal-req-fornecedor">Fornecedor Cadastrado *</label>
-          <select id="modal-req-fornecedor" required aria-label="Fornecedor predefinido"></select>
-        </div>
+        <div class="form-group"><label for="modal-req-fornecedor">Fornecedor Cadastrado *</label><select id="modal-req-fornecedor" aria-label="Fornecedor"></select></div>
         <div class="form-row">
-          <div class="form-group flex-1">
-            <label for="modal-req-valor-unit">Preço Unitário (R$)</label>
-            <input type="number" id="modal-req-valor-unit" step="0.01" value="12.50" required>
-          </div>
-          <div class="form-group flex-1">
-            <label for="modal-req-entrega">Previsão de Entrega</label>
-            <input type="date" id="modal-req-entrega" required>
-          </div>
+          <div class="form-group flex-1"><label for="modal-req-valor-unit">Preço Unitário (R$)</label><input type="number" id="modal-req-valor-unit" step="0.01" min="0"></div>
+          <div class="form-group flex-1"><label for="modal-req-entrega">Previsão de Entrega</label><input type="date" id="modal-req-entrega"></div>
         </div>
-        <!-- Observação com limites de 10 a 5000 caracteres (Requisito 5) -->
         <div class="form-group">
-          <label for="modal-req-obs">Observações do Pedido (Mínimo 10, Máximo 5000 caracteres)</label>
-          <textarea id="modal-req-obs" rows="2" minlength="10" maxlength="5000" placeholder="Ex: Pedido com prioridade alta para o turno da manhã..."></textarea>
-          <div class="counter-wrapper">
-            <span id="req-obs-counter" class="char-counter counter-neutral">0 / 5000 caracteres (mínimo 10)</span>
-          </div>
+          <label for="modal-req-obs">Observações do Pedido (opcional; se preenchida: mínimo 10, máximo 5000 caracteres)</label>
+          <textarea id="modal-req-obs" rows="2" maxlength="5000" placeholder="Ex: Pedido com prioridade alta para o turno da manhã..."></textarea>
+          <div class="counter-wrapper"><span id="req-obs-counter" class="char-counter counter-neutral">0 / 5000 caracteres (mínimo 10)</span></div>
         </div>
-        <!-- Ações do Modal: SEM botão cancelar (Requisito 4) -->
-        <div class="modal-actions-single">
-          <button type="submit" class="btn btn-primary btn-block">💾 Confirmar e Salvar Requisição</button>
-        </div>
+        <div class="modal-actions-single"><button type="submit" class="btn btn-primary btn-block" id="btn-enviar-requisicao">📨 Enviar Requisição</button></div>
       </form>
     </div>
   </div>
 
-  <!-- MODAL: Cancelar Requisição com Justificativa Obrigatória (10 a 5000 chars) (Requisito 5) -->
-  <div id="modal-cancelar-requisicao" class="modal-backdrop is-hidden">
+  <div id="modal-cancelar-requisicao" class="modal-backdrop is-hidden" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-cancel">
     <div class="modal-box">
-      <div class="modal-header">
-        <h3>Cancelar Requisição de Compra</h3>
-        <button class="modal-close" id="btn-fechar-modal-cancelar" aria-label="Fechar modal" title="Fechar">&times;</button>
-      </div>
-      <form id="form-cancelar-requisicao">
+      <div class="modal-header"><h3 id="titulo-modal-cancel">Cancelar Requisição de Compra</h3><button class="modal-close" id="btn-fechar-modal-cancelar" aria-label="Fechar" title="Fechar">&times;</button></div>
+      <form id="form-cancelar-requisicao" novalidate>
         <input type="hidden" id="cancel-req-id">
-        <div class="cancel-target-summary" id="cancel-target-info">
-          <!-- Detalhes do pedido sendo cancelado -->
-        </div>
+        <div class="cancel-target-summary" id="cancel-target-info"></div>
         <div class="form-group">
           <label for="cancel-justificativa">Motivo / Justificativa do Cancelamento * (10 a 5000 caracteres)</label>
-          <textarea id="cancel-justificativa" rows="4" minlength="10" maxlength="5000" placeholder="Descreva de forma clara o motivo do cancelamento deste pedido..." required></textarea>
-          <div class="counter-wrapper">
-            <span id="cancel-char-counter" class="char-counter counter-invalid">0 / 5000 caracteres (mínimo 10)</span>
-          </div>
+          <textarea id="cancel-justificativa" rows="4" maxlength="5000" placeholder="Descreva de forma clara o motivo do cancelamento deste pedido..."></textarea>
+          <div class="counter-wrapper"><span id="cancel-char-counter" class="char-counter counter-neutral">0 / 5000 caracteres (mínimo 10)</span></div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" id="btn-abortar-cancelamento">Voltar</button>
-          <button type="submit" class="btn btn-danger" id="btn-confirmar-cancelamento-envio">Confirmar Cancelamento</button>
+          <button type="submit" class="btn btn-danger" id="btn-confirmar-cancelamento-envio">Enviar</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- MODAL: Detalhes do Cancelamento (Requisito 7: Campo 'Cancelado' Clicável) -->
-  <div id="modal-detalhes-cancelamento" class="modal-backdrop is-hidden">
+  <div id="modal-detalhes-cancelamento" class="modal-backdrop is-hidden" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-detalhes">
     <div class="modal-box">
-      <div class="modal-header">
-        <h3>Motivo do Cancelamento da Requisição</h3>
-        <button class="modal-close" id="btn-fechar-detalhes-cancelamento" aria-label="Fechar modal" title="Fechar">&times;</button>
-      </div>
+      <div class="modal-header"><h3 id="titulo-modal-detalhes">Motivo do Cancelamento da Requisição</h3><button class="modal-close" id="btn-fechar-detalhes-cancelamento" aria-label="Fechar" title="Fechar">&times;</button></div>
       <div class="detalhes-cancelamento-body">
-        <div class="detalhes-row">
-          <span class="detalhes-label">Nº do Pedido:</span>
-          <strong id="detalhe-pedido-cod">REQ-9665</strong>
-        </div>
-        <div class="detalhes-row">
-          <span class="detalhes-label">Fornecedor:</span>
-          <span id="detalhe-fornecedor">Distribuidora</span>
-        </div>
-        <div class="detalhes-row">
-          <span class="detalhes-label">Produto Solicitado:</span>
-          <span id="detalhe-produto">Copos</span>
-        </div>
-        <div class="detalhes-justificativa-box">
-          <span class="detalhes-just-title">Justificativa Registrada pelo Operador:</span>
-          <p id="detalhe-texto-justificativa" class="detalhe-texto-justificativa"></p>
-        </div>
-        <div class="detalhes-chars-count" id="detalhe-chars-count">
-          Comprimento da justificativa: 120 caracteres.
-        </div>
+        <div class="detalhes-row"><span class="detalhes-label">Nº do Pedido:</span><strong id="detalhe-pedido-cod"></strong></div>
+        <div class="detalhes-row"><span class="detalhes-label">Fornecedor:</span><span id="detalhe-fornecedor"></span></div>
+        <div class="detalhes-row"><span class="detalhes-label">Produto Solicitado:</span><span id="detalhe-produto"></span></div>
+        <div class="detalhes-justificativa-box"><span class="detalhes-just-title">Justificativa Registrada pelo Operador:</span><p id="detalhe-texto-justificativa" class="detalhe-texto-justificativa"></p></div>
+        <div class="detalhes-chars-count" id="detalhe-chars-count"></div>
       </div>
-      <div class="modal-actions-single">
-        <button type="button" class="btn btn-secondary btn-block" id="btn-fechar-detalhes-cancelamento-btn">Fechar</button>
-      </div>
+      <div class="modal-actions-single"><button type="button" class="btn btn-secondary btn-block" id="btn-fechar-detalhes-cancelamento-btn">Fechar</button></div>
     </div>
   </div>
 
-  <!-- MODAL: Registrar Movimentação Avulsa (Entrada / Saída) -->
-  <div id="modal-movimentacao" class="modal-backdrop is-hidden">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3 id="modal-mov-titulo">Registrar Movimentação de Estoque</h3>
-        <button class="modal-close" id="btn-fechar-modal-mov" aria-label="Fechar modal" title="Fechar">&times;</button>
-      </div>
-      <form id="form-movimentacao-modal">
-        <div class="form-group">
-          <label for="modal-mov-tipo">Tipo de Movimentação *</label>
-          <select id="modal-mov-tipo" required aria-label="Tipo de Movimentação">
-            <option value="Entrada">Entrada (Compra avulsa / Devolução)</option>
-            <option value="Saída">Saída (Descarte / Avaria / Consumo interno)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="modal-mov-produto">Produto *</label>
-          <select id="modal-mov-produto" required aria-label="Produto da movimentação"></select>
-        </div>
-        <div class="form-row">
-          <div class="form-group flex-2">
-            <label for="modal-mov-quantidade">Quantidade *</label>
-            <input type="number" id="modal-mov-quantidade" min="0.1" step="0.1" value="1" required>
-          </div>
-          <div class="form-group flex-1">
-            <label for="modal-mov-unidade">Unidade</label>
-            <input type="text" id="modal-mov-unidade" value="UN" readonly>
-          </div>
-        </div>
-        <div class="form-group">
+  <div id="modal-movimentacao" class="modal-backdrop is-hidden" role="dialog" aria-modal="true" aria-labelledby="modal-mov-titulo">
+    <div class="modal-box modal-wide">
+      <div class="modal-header"><h3 id="modal-mov-titulo">Registrar Movimentação de Estoque</h3><button class="modal-close" id="btn-fechar-modal-mov" aria-label="Fechar" title="Fechar">&times;</button></div>
+      <form id="form-movimentacao-modal" novalidate>
+        <input type="hidden" id="modal-mov-tipo" value="Entrada">
+        <div class="mov-lines-head"><span>Produto *</span><span>Quantidade *</span><span></span></div>
+        <div id="mov-linhas"></div>
+        <button type="button" class="btn btn-sm btn-secondary" id="btn-mov-add-linha">+ Adicionar outro item (lote)</button>
+        <div class="form-group mov-obs">
           <label for="modal-mov-obs">Motivo / Justificativa * (Mínimo 10, Máximo 5000 caracteres)</label>
-          <textarea id="modal-mov-obs" rows="3" minlength="10" maxlength="5000" placeholder="Descreva o motivo da saída ou entrada..." required></textarea>
-          <div class="counter-wrapper">
-            <span id="mov-obs-counter" class="char-counter counter-invalid">0 / 5000 caracteres (mínimo 10)</span>
-          </div>
+          <textarea id="modal-mov-obs" rows="3" maxlength="5000" placeholder="Descreva o motivo da saída ou entrada..."></textarea>
+          <div class="counter-wrapper"><span id="mov-obs-counter" class="char-counter counter-neutral">0 / 5000 caracteres (mínimo 10)</span></div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" id="btn-cancelar-modal-mov">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Registrar Movimentação</button>
+          <button type="submit" class="btn btn-primary" id="btn-registrar-mov">Registrar Movimentação</button>
         </div>
       </form>
     </div>
   </div>
 
-  <div id="toast-container" class="toast-container"></div>
-  <script src="app.js"></script>
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <script src="js/core.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/estoque.js"></script>
+  <script src="js/requisicoes.js"></script>
+  <script src="js/produtos.js"></script>
+  <script src="js/movimentos.js"></script>
+  <script src="js/vendas.js"></script>
+  <script src="js/relatorios.js"></script>
+  <script src="js/admin.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>

@@ -49,6 +49,7 @@ function validarTexto(valor, rotulo, { obrigatorio = false, min = 10, max = 5000
 
 const FORMAS_PAGAMENTO = ['Dinheiro', 'Cartão Débito', 'Cartão Crédito', 'PIX'];
 const SITUACOES_ABERTAS = ['Em Aberto', 'Cotado', 'AF Gerada'];
+const MOTIVOS_PERDA = ['Vencido', 'Quebra/Avaria', 'Sobra do dia', 'Outro'];
 
 // ------------------------------------------------------------------ consultas e conversões de linhas
 const SQL_USUARIO = 'SELECT u.*, p.nome_perfil FROM usuario u JOIN perfil p ON p.id_perfil = u.id_perfil';
@@ -65,7 +66,7 @@ const mapMov = m => ({
   data_movimentacao: hm(m.data_movimentacao), observacao: m.observacao || '', id_produto: m.id_produto,
   produto_nome: m.produto_nome, codigo_barras: m.codigo_barras, unidade: m.unidade, valor_unitario: m.valor_unitario,
   valor_total: r2(m.quantidade * m.valor_unitario), id_usuario: m.id_usuario, usuario_nome: m.usuario_nome || 'Sistema',
-  origem: m.origem
+  origem: m.origem, motivo_perda: m.motivo_perda || null
 });
 
 const SQL_VENDA = `SELECT v.*, u.nome AS usuario_nome, uc.nome AS cancelada_por_nome, ua.nome AS autorizada_por_nome,
@@ -142,7 +143,8 @@ class Database {
       descontoMaximoPercent: Number(r.desconto_maximo_percent),
       intervaloAtualizacaoSeg: Number(r.intervalo_atualizacao_seg),
       simularCartaoNegado: bool(r.simular_cartao_negado),
-      simularFornecedorIndisponivel: bool(r.simular_fornecedor_indisponivel)
+      simularFornecedorIndisponivel: bool(r.simular_fornecedor_indisponivel),
+      diasAlertaValidade: Number(r.dias_alerta_validade)
     };
   }
 
@@ -164,11 +166,16 @@ class Database {
         if (!Number.isFinite(n) || n < 2 || n > 60) throw erro('O intervalo de atualização deve estar entre 2 e 60 segundos.');
         s.intervaloAtualizacaoSeg = n;
       }
+      if (d.diasAlertaValidade !== undefined) {
+        const n = Number(d.diasAlertaValidade);
+        if (!Number.isInteger(n) || n < 0 || n > 60) throw erro('O aviso de validade deve ser de 0 a 60 dias de antecedência.');
+        s.diasAlertaValidade = n;
+      }
       ['simularCartaoNegado', 'simularFornecedorIndisponivel'].forEach(k => { if (d[k] !== undefined) s[k] = !!d[k]; });
       await c.query(
         `UPDATE configuracao SET estabelecimento = ?, desconto_maximo_percent = ?, intervalo_atualizacao_seg = ?,
-           simular_cartao_negado = ?, simular_fornecedor_indisponivel = ? WHERE id = 1`,
-        [s.estabelecimento, s.descontoMaximoPercent, s.intervaloAtualizacaoSeg, s.simularCartaoNegado, s.simularFornecedorIndisponivel]
+           simular_cartao_negado = ?, simular_fornecedor_indisponivel = ?, dias_alerta_validade = ? WHERE id = 1`,
+        [s.estabelecimento, s.descontoMaximoPercent, s.intervaloAtualizacaoSeg, s.simularCartaoNegado, s.simularFornecedorIndisponivel, s.diasAlertaValidade]
       );
       return s;
     });
@@ -487,18 +494,39 @@ class Database {
     return rows.map(a => ({ ...a, lote: a.lote || '', data_alerta: hm(a.data_alerta) }));
   }
 
+  // ---------------------------------------------------------------- alerta de validade
+  // Produtos ativos, com saldo, vencidos ou que vencem em até N dias (N vem das configurações).
+  async getValidades(c = pool) {
+    const { diasAlertaValidade: dias } = await this.getSettings(c);
+    const hoje = dataISO();
+    const [rows] = await c.query(
+      `SELECT p.id_produto, p.nome_produto, p.codigo_barras, p.unidade, p.lote, p.validade, p.quantidade_estoque, p.preco_custo,
+              c.nome_categoria AS categoria, DATEDIFF(p.validade, ?) AS dias_restantes
+       FROM produto p JOIN categoria c ON c.id_categoria = p.id_categoria
+       WHERE p.status = 'Ativo' AND p.validade IS NOT NULL AND p.quantidade_estoque > 0 AND p.validade <= ?
+       ORDER BY p.validade, p.nome_produto`, [hoje, dataISO(deslocar(dias))]);
+    const itens = rows.map(p => {
+      const d = Number(p.dias_restantes);
+      return {
+        ...p, lote: p.lote || '', dias_restantes: d, valor_em_risco: r2(p.quantidade_estoque * p.preco_custo),
+        situacao: d < 0 ? 'Vencido' : d === 0 ? 'Vence hoje' : 'Vencendo'
+      };
+    });
+    return { dias, hoje, vencidos: itens.filter(i => i.dias_restantes < 0).length, itens };
+  }
+
   // ---------------------------------------------------------------- dashboard (RF 10)
   async getDashboardData(usuario) {
     const hoje = dataISO();
-    const [ativos] = await pool.query("SELECT id_categoria, quantidade_estoque, validade FROM produto WHERE status = 'Ativo'");
+    const [ativos] = await pool.query("SELECT id_categoria, quantidade_estoque FROM produto WHERE status = 'Ativo'");
     const alertas = await this.getAlertasCriticos();
+    const validades = await this.getValidades();
     const [[vh]] = await pool.query(
       "SELECT COUNT(*) AS n, COALESCE(SUM(valor_total), 0) AS total FROM venda WHERE status_venda = 'Concluída' AND DATE(data_venda) = ?", [hoje]);
     const [[ra]] = await pool.query('SELECT COUNT(*) AS n FROM requisicao WHERE situacao IN (?)', [SITUACOES_ABERTAS]);
     const categorias = await this.listCategorias();
     const totalEmEstoque = ativos.reduce((a, p) => a + Number(p.quantidade_estoque), 0);
     const faturamentoHoje = Number(vh.total), vendasHoje = Number(vh.n);
-    const limiteVal = dataISO(deslocar(3));
     const categoriasMap = {};
     categorias.forEach(c => { categoriasMap[c.id_categoria] = { nome: c.nome_categoria, total: 0 }; });
     ativos.forEach(p => { if (categoriasMap[p.id_categoria]) categoriasMap[p.id_categoria].total += Number(p.quantidade_estoque); });
@@ -512,9 +540,11 @@ class Database {
         totalVendasHoje: r2(faturamentoHoje).toFixed(2),
         vendasHojeCount: vendasHoje,
         ticketMedioHoje: vendasHoje ? r2(faturamentoHoje / vendasHoje).toFixed(2) : '0.00',
-        produtosVencendoCount: ativos.filter(p => p.validade && p.validade <= limiteVal).length
+        produtosVencendoCount: validades.itens.length,
+        produtosVencidosCount: validades.vencidos
       },
       alertas,
+      validades,
       ultimasCompras: await this.listRequisicoes({ limite: 6 }),
       distribuicaoEstoque: Object.values(categoriasMap).filter(i => i.total > 0).map(i => ({
         categoria: i.nome, quantidade: r3(i.total),
@@ -642,15 +672,15 @@ class Database {
     const vu = data.valor_unitario !== undefined ? Number(data.valor_unitario) : (data.tipo_movimentacao === 'Saída' ? prod.preco_venda : prod.preco_custo);
     const quando = dataHora();
     const [r] = await c.query(
-      `INSERT INTO movimentacao_estoque (tipo_movimentacao, quantidade, data_movimentacao, observacao, origem, valor_unitario, id_produto, id_usuario)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [data.tipo_movimentacao, r3(data.quantidade), quando, data.observacao || '', data.origem || 'manual', r2(vu), prod.id_produto, ator ? ator.id_usuario : null]
+      `INSERT INTO movimentacao_estoque (tipo_movimentacao, quantidade, data_movimentacao, observacao, origem, motivo_perda, valor_unitario, id_produto, id_usuario)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [data.tipo_movimentacao, r3(data.quantidade), quando, data.observacao || '', data.origem || 'manual', data.motivo_perda || null, r2(vu), prod.id_produto, ator ? ator.id_usuario : null]
     );
     return mapMov({
       id_movimentacao: r.insertId, tipo_movimentacao: data.tipo_movimentacao, quantidade: r3(data.quantidade), data_movimentacao: quando,
       observacao: data.observacao, id_produto: prod.id_produto, produto_nome: prod.nome_produto, codigo_barras: prod.codigo_barras,
       unidade: prod.unidade, valor_unitario: r2(vu), id_usuario: ator ? ator.id_usuario : null, usuario_nome: ator ? ator.nome : null,
-      origem: data.origem || 'manual'
+      origem: data.origem || 'manual', motivo_perda: data.motivo_perda
     });
   }
 
@@ -659,29 +689,46 @@ class Database {
     return this.tx(async c => {
       const tipo = body.tipo_movimentacao;
       if (!['Entrada', 'Saída'].includes(tipo)) throw erro('Tipo de movimentação inválido.');
-      const itens = Array.isArray(body.itens) ? body.itens : [{ id_produto: body.id_produto, quantidade: body.quantidade }];
-      if (!itens.length) throw erro('Informe ao menos um item.');
       const obs = validarTexto(body.observacao, 'O motivo da movimentação', { obrigatorio: true });
-      const acumulado = new Map();
-      for (const it of itens) {
-        const prod = await this.getProductById(it.id_produto, c, true);
-        if (!prod) throw erro('Produto não cadastrado.', 404);
-        const q = validarQuantidade(prod, it.quantidade);
-        const a = acumulado.get(prod.id_produto) || { prod, qtd: 0 };
-        a.qtd = r3(a.qtd + q);
-        acumulado.set(prod.id_produto, a);
-      }
-      const movs = [];
-      for (const { prod, qtd } of acumulado.values()) {
-        if (tipo === 'Saída' && prod.quantidade_estoque < qtd) {
-          throw erro(`Estoque insuficiente de "${prod.nome_produto}"! Saldo disponível: ${prod.quantidade_estoque} ${prod.unidade}.`);
-        }
-        const saldo = r3(tipo === 'Saída' ? prod.quantidade_estoque - qtd : prod.quantidade_estoque + qtd);
-        await c.query('UPDATE produto SET quantidade_estoque = ? WHERE id_produto = ?', [saldo, prod.id_produto]);
-        movs.push(await this.addMovimentacao(c, { tipo_movimentacao: tipo, quantidade: qtd, observacao: obs }, prod, ator));
-      }
-      return movs;
+      return this.movimentarItens(c, tipo, body, () => ({ observacao: obs }), ator);
     });
+  }
+
+  // Perda/sobra: saída de estoque com motivo, valorizada pelo preço de custo (o que a padaria perdeu).
+  registrarPerdas(body, ator) {
+    return this.tx(async c => {
+      const motivo = body.motivo_perda;
+      if (!MOTIVOS_PERDA.includes(motivo)) throw erro(`Informe o motivo da perda: ${MOTIVOS_PERDA.join(', ')}.`);
+      const obs = validarTexto(body.observacao, 'A observação', { obrigatorio: motivo === 'Outro' });
+      return this.movimentarItens(c, 'Saída', body,
+        prod => ({ observacao: obs, origem: 'perda', motivo_perda: motivo, valor_unitario: prod.preco_custo }), ator);
+    });
+  }
+
+  // Valida os itens (somando produtos repetidos), atualiza o saldo e grava uma movimentação por produto.
+  // `extra(prod)` devolve os campos próprios da movimentação (observação, origem, motivo, valor).
+  async movimentarItens(c, tipo, body, extra, ator) {
+    const itens = Array.isArray(body.itens) ? body.itens : [{ id_produto: body.id_produto, quantidade: body.quantidade }];
+    if (!itens.length) throw erro('Informe ao menos um item.');
+    const acumulado = new Map();
+    for (const it of itens) {
+      const prod = await this.getProductById(it.id_produto, c, true);
+      if (!prod) throw erro('Produto não cadastrado.', 404);
+      const q = validarQuantidade(prod, it.quantidade);
+      const a = acumulado.get(prod.id_produto) || { prod, qtd: 0 };
+      a.qtd = r3(a.qtd + q);
+      acumulado.set(prod.id_produto, a);
+    }
+    const movs = [];
+    for (const { prod, qtd } of acumulado.values()) {
+      if (tipo === 'Saída' && prod.quantidade_estoque < qtd) {
+        throw erro(`Estoque insuficiente de "${prod.nome_produto}"! Saldo disponível: ${prod.quantidade_estoque} ${prod.unidade}.`);
+      }
+      const saldo = r3(tipo === 'Saída' ? prod.quantidade_estoque - qtd : prod.quantidade_estoque + qtd);
+      await c.query('UPDATE produto SET quantidade_estoque = ? WHERE id_produto = ?', [saldo, prod.id_produto]);
+      movs.push(await this.addMovimentacao(c, { tipo_movimentacao: tipo, quantidade: qtd, ...extra(prod) }, prod, ator));
+    }
+    return movs;
   }
 
   async getMovimentacoes({ tipo, from, to } = {}) {
@@ -1048,6 +1095,37 @@ class Database {
     };
   }
 
+  // Relatório de desperdício: perdas/sobras por produto e por motivo, valorizadas pelo custo.
+  async getRelatorioPerdas({ from, to, categoria } = {}) {
+    this.validarPeriodo({ from, to });
+    const cat = categoria ? Number(categoria) : null;
+    const where = ["m.origem = 'perda'"], params = [];
+    if (from) { where.push('m.data_movimentacao >= ?'); params.push(`${from} 00:00:00`); }
+    if (to) { where.push('m.data_movimentacao <= ?'); params.push(`${to} 23:59:59`); }
+    if (cat) { where.push('p.id_categoria = ?'); params.push(cat); }
+    const [rows] = await pool.query(
+      `SELECT m.*, p.nome_produto AS produto_nome, p.codigo_barras, p.unidade, u.nome AS usuario_nome, c.nome_categoria AS categoria
+       FROM movimentacao_estoque m JOIN produto p ON p.id_produto = m.id_produto
+       JOIN categoria c ON c.id_categoria = p.id_categoria LEFT JOIN usuario u ON u.id_usuario = m.id_usuario
+       WHERE ${where.join(' AND ')} ORDER BY m.data_movimentacao DESC, m.id_movimentacao DESC`, params);
+    const registros = rows.map(m => ({ ...mapMov(m), categoria: m.categoria }));
+    const produtos = new Map();
+    registros.forEach(r => {
+      const p = produtos.get(r.id_produto) || { id_produto: r.id_produto, nome_produto: r.produto_nome, categoria: r.categoria, unidade: r.unidade, quantidade: 0, valor_total: 0, registros: 0 };
+      p.quantidade = r3(p.quantidade + r.quantidade); p.valor_total = r2(p.valor_total + r.valor_total); p.registros++;
+      produtos.set(r.id_produto, p);
+    });
+    const porMotivo = MOTIVOS_PERDA.map(motivo => {
+      const doMotivo = registros.filter(r => r.motivo_perda === motivo);
+      return { motivo, registros: doMotivo.length, valor_total: r2(doMotivo.reduce((a, r) => a + r.valor_total, 0)) };
+    }).filter(m => m.registros);
+    return {
+      filtros: { from: from || null, to: to || null, categoria: cat },
+      totalRegistros: registros.length, valorTotal: r2(registros.reduce((a, r) => a + r.valor_total, 0)),
+      porProduto: [...produtos.values()].sort((a, b) => b.valor_total - a.valor_total), porMotivo, registros
+    };
+  }
+
   // ---------------------------------------------------------------- busca global (barra de pesquisa)
   // `permitido(perm)` informa o que o perfil do usuário pode ver; nada além disso é retornado.
   // A collation do banco (utf8mb4_0900_ai_ci) já ignora acentos e maiúsculas: "pao" acha "Pão".
@@ -1096,4 +1174,4 @@ class Database {
 
 module.exports = new Database();
 module.exports.Database = Database;
-module.exports.util = { dataISO, dataHora, r2, r3, FORMAS_PAGAMENTO };
+module.exports.util = { dataISO, dataHora, r2, r3, FORMAS_PAGAMENTO, MOTIVOS_PERDA };

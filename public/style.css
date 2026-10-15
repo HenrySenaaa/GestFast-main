@@ -480,9 +480,12 @@ body {
   gap: 16px;
 }
 
-.card-alertas, .card-compras {
+.card-alertas, .card-compras, .card-validade {
   background: #f3f3f3;
 }
+
+.val-vencido { color: var(--danger) !important; }
+.val-vencendo { color: var(--warning) !important; }
 
 .alertas-figma-list, .compras-figma-list {
   display: flex;

@@ -30,6 +30,15 @@
         <span class="val-highlight">${GF.qty(a.quantidade_estoque)}</span>
       </div>`).join('') : '<div class="figma-data-row"><span>Todos os itens com estoque regular</span><span class="val-highlight">OK</span></div>';
 
+    const val = d.validades;
+    $('#dash-validade-resumo').textContent = val.itens.length ? `${val.vencidos} vencido(s) • ${val.itens.length - val.vencidos} vencendo em até ${val.dias} dia(s)` : '';
+    const perda = GF.can('movimentos:registrar');
+    $('#dash-validade-list').innerHTML = val.itens.length ? val.itens.map(i => `
+      <div class="figma-data-row${perda ? ' row-click' : ''}" data-perda="${i.id_produto}" data-qtd="${i.quantidade_estoque}" title="Lote ${esc(i.lote || '-')} • validade ${GF.date(i.validade)} • ${GF.qty(i.quantidade_estoque)} ${esc(i.unidade)} (${GF.money(i.valor_em_risco)} no custo)${perda ? ' - clique para dar baixa como perda' : ''}">
+        <span>${esc(i.nome_produto)}</span>
+        <span class="val-highlight ${i.dias_restantes < 0 ? 'val-vencido' : 'val-vencendo'}">${i.dias_restantes < 0 ? `Vencido (${GF.date(i.validade)})` : i.dias_restantes === 0 ? 'Vence hoje' : `${i.dias_restantes} dia(s)`}</span>
+      </div>`).join('') : '<div class="figma-data-row"><span>Nenhum produto vencido ou perto de vencer</span><span class="val-highlight">OK</span></div>';
+
     $('#dash-compras-figma-list').innerHTML = d.ultimasCompras.length ? d.ultimasCompras.map(c => `
       <div class="figma-data-row row-click" data-req="${c.id_requisicao}" tabindex="0" role="button" title="${esc(c.codigo_pedido)} • ${esc(c.fornecedor)} • ${esc(c.situacao)}">
         <span>${esc(c.produto_nome)}</span>
@@ -80,6 +89,10 @@
     $('#dash-btn-ir-pdv').addEventListener('click', () => GF.navigate('vendas'));
     $('#dash-btn-ir-requisicao').addEventListener('click', () => GF.navigate('requisicoes'));
     GF.delegate($('#dash-alertas-figma-list'), 'click', '[data-pedir]', (e, b) => GF.views.requisicoes.abrirNova(Number(b.dataset.pedir)));
+    GF.delegate($('#dash-validade-list'), 'click', '[data-perda]', (e, row) => {
+      if (!GF.can('movimentos:registrar')) return;
+      GF.abrirPerda({ id_produto: Number(row.dataset.perda), quantidade: Number(row.dataset.qtd), motivo: 'Vencido', aoSalvar: () => atualizar(false) });
+    });
     const abrirReq = (e, row) => { GF.views.requisicoes.selecionar = Number(row.dataset.req); GF.navigate('requisicoes'); };
     GF.delegate($('#dash-compras-figma-list'), 'click', '[data-req]', abrirReq);
     GF.delegate($('#dash-compras-figma-list'), 'keydown', '[data-req]', (e, row) => { if (e.key === 'Enter') abrirReq(e, row); });

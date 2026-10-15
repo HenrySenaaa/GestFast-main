@@ -17,8 +17,8 @@ INSERT INTO usuario (id_usuario, nome, email, senha, cargo, status, data_criacao
   (2, 'Henry Sena', 'henry@padarianovayork.com', 'scrypt$93d59bfa5bcd5e60e57ed0e29a4ad8d1$bafc93166df2c477eff90d654615633fbfd28b23f3256986ac384bd252aa15e54ee90c2fc634491366b7ee03b9adce69f7d3a544472263f39df349ceeeed164c', 'Atendente / Operador de Caixa', 'Ativo', CURDATE(), 3),
   (3, 'Equipe BackOffice', 'backoffice@padarianovayork.com', 'scrypt$4ae990e89a82a73c0674138f2c1f200c$bec050b3287b3a8ee1ce09f8b2c6f21728a1957d9bdf3b895ff32ecd78f9a07f43e53fe85b8ac2997ed9c186d1ec57f8f75ce44eb328b94f93edbbc5320bafda', 'BackOffice / Estoque', 'Ativo', CURDATE(), 2);
 
-INSERT INTO configuracao (id, estabelecimento, desconto_maximo_percent, intervalo_atualizacao_seg, simular_cartao_negado, simular_fornecedor_indisponivel) VALUES
-  (1, 'Padaria Nova York - São Caetano do Sul (SP)', 20, 3, FALSE, FALSE);
+INSERT INTO configuracao (id, estabelecimento, desconto_maximo_percent, intervalo_atualizacao_seg, simular_cartao_negado, simular_fornecedor_indisponivel, dias_alerta_validade) VALUES
+  (1, 'Padaria Nova York - São Caetano do Sul (SP)', 20, 3, FALSE, FALSE, 3);
 
 INSERT INTO categoria (id_categoria, nome_categoria, descricao) VALUES
   (1, 'Pães', 'Pães artesanais, franceses, baguetes e doces'),
@@ -48,7 +48,7 @@ INSERT INTO produto (id_produto, codigo_barras, nome_produto, descricao, unidade
   (8,  '78910008', 'Leite Integral 1L', 'Leite UHT integral pasteurizado 1L', 'UN', '1000ml', 3.80, 6.00, 4.90, 7.50, 80, 30, 'Ativo', 2, '548900', CURDATE() + INTERVAL 20 DAY, ''),
   (9,  '78910009', 'Ovos Brancos Granjeiros (Dúzia)', 'Dúzia de ovos brancos selecionados tipo grande de alta qualidade', 'DZ', '650g', 8.50, 15.00, 12.00, 18.00, 100, 35, 'Ativo', 3, '549111', CURDATE() + INTERVAL 12 DAY, ''),
   (10, '78910010', 'Suco de Uva Integral 500ml', 'Suco de uva tinto 100% natural sem adição de açúcares ou conservantes', 'UN', '500ml', 4.80, 8.00, 6.50, 10.00, 25, 15, 'Ativo', 2, '578412', CURDATE() + INTERVAL 150 DAY, ''),
-  (11, '78910011', 'Pão Doce Tradicional', 'Pão doce fofinho com creme de baunilha artesanal e coco ralado', 'UN', '80g', 1.10, 3.20, 2.50, 4.00, 60, 20, 'Ativo', 1, '548999', CURDATE() + INTERVAL 1 DAY, ''),
+  (11, '78910011', 'Pão Doce Tradicional', 'Pão doce fofinho com creme de baunilha artesanal e coco ralado', 'UN', '80g', 1.10, 3.20, 2.50, 4.00, 60, 20, 'Ativo', 1, '548999', CURDATE() - INTERVAL 1 DAY, ''),
   (12, '78910012', 'Bala Toffee Mastigável', 'Balas caramelizadas artesanais sortidas tradicionais da bomboniere', 'UN', '10g', 0.10, 0.30, 0.20, 0.50, 200, 50, 'Ativo', 4, '546111', CURDATE() + INTERVAL 180 DAY, '');
 
 INSERT INTO requisicao (id_requisicao, codigo_pedido, id_fornecedor, id_produto, produto_nome, quantidade_pedida, quantidade_atendida, unidade, valor_unitario, valor_total, situacao, data_pedido, previsao_entrega, endereco_entrega, observacao, justificativa_cancelamento) VALUES
@@ -78,10 +78,11 @@ INSERT INTO item_venda (id_venda, id_produto, quantidade, valor_unitario, subtot
   (5, 4, 6.5, 16.90, 109.85),
   (6, 10, 12, 8.00, 96.00);
 
-INSERT INTO movimentacao_estoque (id_movimentacao, tipo_movimentacao, quantidade, data_movimentacao, observacao, origem, valor_unitario, id_produto, id_usuario) VALUES
-  (1, 'Entrada', 60, NOW() - INTERVAL 900 MINUTE, 'Recebimento de lote do fornecedor Panificadora Central', 'manual', 5.50, 4, 1),
-  (2, 'Saída', 15, NOW() - INTERVAL 600 MINUTE, 'Vendas acumuladas do balcão de frios e lanches', 'venda', 3.50, 1, 2),
-  (3, 'Saída', 6, NOW() - INTERVAL 420 MINUTE, 'Venda de Café Pilão para clientes do salão', 'venda', 18.90, 2, 2);
+INSERT INTO movimentacao_estoque (id_movimentacao, tipo_movimentacao, quantidade, data_movimentacao, observacao, origem, motivo_perda, valor_unitario, id_produto, id_usuario) VALUES
+  (1, 'Entrada', 60, NOW() - INTERVAL 900 MINUTE, 'Recebimento de lote do fornecedor Panificadora Central', 'manual', NULL, 5.50, 4, 1),
+  (2, 'Saída', 15, NOW() - INTERVAL 600 MINUTE, 'Vendas acumuladas do balcão de frios e lanches', 'venda', NULL, 3.50, 1, 2),
+  (3, 'Saída', 6, NOW() - INTERVAL 420 MINUTE, 'Venda de Café Pilão para clientes do salão', 'venda', NULL, 18.90, 2, 2),
+  (4, 'Saída', 3, NOW() - INTERVAL 300 MINUTE, 'Pães franceses que sobraram do fim do dia', 'perda', 'Sobra do dia', 5.50, 4, 2);
 
 INSERT INTO conferencia (id_conferencia, data_conferencia, observacao, ajustou_estoque, id_usuario) VALUES
   (1, NOW() - INTERVAL 3 DAY, 'Conferência de estoque físico e ajuste de saldos.', TRUE, 2);

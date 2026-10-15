@@ -55,6 +55,7 @@ CREATE TABLE configuracao (
   intervalo_atualizacao_seg       INT NOT NULL DEFAULT 3,
   simular_cartao_negado           BOOLEAN NOT NULL DEFAULT FALSE,
   simular_fornecedor_indisponivel BOOLEAN NOT NULL DEFAULT FALSE,
+  dias_alerta_validade            INT NOT NULL DEFAULT 3,  -- avisa quando faltam N dias (ou menos) para vencer
   CHECK (id = 1)
 ) ENGINE=InnoDB;
 
@@ -190,7 +191,8 @@ CREATE TABLE movimentacao_estoque (
   quantidade        DECIMAL(12,3) NOT NULL CHECK (quantidade > 0),
   data_movimentacao DATETIME NOT NULL,
   observacao        TEXT,
-  origem            ENUM('manual','venda','requisicao','conferencia','estorno','ajuste') NOT NULL DEFAULT 'manual',
+  origem            ENUM('manual','venda','requisicao','conferencia','estorno','ajuste','perda') NOT NULL DEFAULT 'manual',
+  motivo_perda      ENUM('Vencido','Quebra/Avaria','Sobra do dia','Outro'),  -- só quando origem = 'perda'
   valor_unitario    DECIMAL(10,2) NOT NULL DEFAULT 0,
   id_produto        INT NOT NULL,
   id_usuario        INT,                              -- NULL = movimento do sistema

@@ -276,3 +276,56 @@ test('Busca global: encontra conteúdo e respeita o perfil', async () => {
   assert.equal(r.usuarios.length, 0); // funcionário não vê a lista de usuários
   assert.equal((await cliente().get('/api/search?q=pao')).status, 401);
 });
+
+test('Etapa 2: alerta de validade no painel e na API', async () => {
+  const a = await admin();
+  let r = await a.get('/api/expiring');
+  assert.equal(r.dias, 3);
+  const doce = r.itens.find(i => i.nome_produto === 'Pão Doce Tradicional');
+  assert.equal(doce.situacao, 'Vencido'); assert.equal(doce.dias_restantes, -1);
+  assert.equal(r.itens.find(i => i.nome_produto === 'Pão Francês').dias_restantes, 1);
+  assert.ok(!r.itens.some(i => i.nome_produto === 'Queijo Mussarela Fatiado')); // vence em 7 dias
+  assert.ok(r.itens.every(i => i.quantidade_estoque > 0 && i.dias_restantes <= 3));
+  const d = (await a.get('/api/dashboard')).data;
+  assert.equal(d.metricas.produtosVencidosCount, r.vencidos);
+  assert.equal(d.metricas.produtosVencendoCount, r.itens.length);
+  assert.equal((await a.put('/api/settings', { diasAlertaValidade: 99 })).status, 400);
+  await a.put('/api/settings', { diasAlertaValidade: 10 });
+  assert.ok((await a.get('/api/expiring')).itens.some(i => i.nome_produto === 'Queijo Mussarela Fatiado'));
+  await a.put('/api/settings', { diasAlertaValidade: 3 });
+});
+
+test('Etapa 2: registro de perdas e sobras com baixa no estoque', async () => {
+  const a = await admin();
+  const antes = await saldo(11);
+  let r = await a.post('/api/losses', { motivo_perda: 'Vencido', itens: [{ id_produto: 11, quantidade: 5 }] });
+  assert.equal(r.status, 201, r.error);
+  assert.equal(await saldo(11), antes - 5);
+  const m = r.movements[0];
+  assert.equal(m.origem, 'perda'); assert.equal(m.motivo_perda, 'Vencido');
+  assert.equal(m.valor_unitario, 1.10); assert.equal(m.valor_total, 5.5); // valor de custo
+  assert.equal((await a.post('/api/losses', { motivo_perda: 'Roubo', itens: [{ id_produto: 11, quantidade: 1 }] })).status, 400);
+  assert.equal((await a.post('/api/losses', { motivo_perda: 'Outro', itens: [{ id_produto: 11, quantidade: 1 }] })).status, 400); // "Outro" exige observação
+  r = await a.post('/api/losses', { motivo_perda: 'Quebra/Avaria', itens: [{ id_produto: 9, quantidade: 1 }, { id_produto: 11, quantidade: 99999 }] });
+  assert.equal(r.status, 400);
+  assert.equal(await saldo(11), antes - 5); // rollback do lote
+  assert.equal((await a.post('/api/losses', { motivo_perda: 'Sobra do dia', itens: [{ id_produto: 4, quantidade: 1.5 }] })).status, 201); // KG aceita fração
+  const saidas = (await a.get('/api/movements?tipo=Saída')).movements;
+  assert.ok(saidas.some(s => s.origem === 'perda' && s.motivo_perda === 'Sobra do dia'));
+});
+
+test('Etapa 2: relatório de desperdício com exportação', async () => {
+  const b = await back();
+  const r = (await b.get('/api/reports/losses')).report;
+  assert.ok(r.totalRegistros >= 3);
+  assert.ok(Math.abs(r.porProduto.reduce((s, p) => s + p.valor_total, 0) - r.valorTotal) < 0.01);
+  assert.ok(Math.abs(r.porMotivo.reduce((s, p) => s + p.valor_total, 0) - r.valorTotal) < 0.01);
+  assert.ok(r.registros.every(x => x.origem === 'perda'));
+  assert.ok((await b.get('/api/reports/losses?categoria=2')).report.registros.every(x => x.categoria === 'Bebidas & Cafés'));
+  const pdf = await b.raw('/api/reports/losses?format=pdf');
+  assert.equal(pdf.buf.slice(0, 5).toString(), '%PDF-');
+  const xlsx = await b.raw('/api/reports/losses?format=xlsx');
+  assert.equal(xlsx.buf.slice(0, 2).toString(), 'PK');
+  const f = await logar('henry@padarianovayork.com', 'novasenha1');
+  assert.equal((await f.get('/api/reports/losses')).status, 403);
+});

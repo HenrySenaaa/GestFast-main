@@ -14,7 +14,7 @@
         $(corpo).innerHTML = movs.length ? movs.map(m => `<tr>
           <td>${GF.date(m.data_movimentacao)}</td><td>${esc(m.produto_nome)}</td><td>${esc(m.codigo_barras)}</td>
           <td>${GF.qty(m.quantidade)} ${esc(m.unidade)}</td><td>${GF.num2(m.valor_unitario)}</td><td>${GF.num2(m.valor_total)}</td>
-          <td>${esc(m.usuario_nome)}</td><td>${esc(m.observacao)}</td></tr>`).join('') : '<tr><td colspan="8" class="empty-cell">Nenhuma movimentação encontrada.</td></tr>';
+          <td>${esc(m.usuario_nome)}</td><td>${m.origem === 'perda' ? `<span class="badge-status-pill badge-warning">Perda: ${esc(m.motivo_perda)}</span> ` : ''}${esc(m.observacao)}</td></tr>`).join('') : '<tr><td colspan="8" class="empty-cell">Nenhuma movimentação encontrada.</td></tr>';
       } catch (e) { $(corpo).innerHTML = '<tr><td colspan="8" class="empty-cell">Falha ao carregar as movimentações.</td></tr>'; }
     };
   }
@@ -22,20 +22,88 @@
   const carregarEntradas = tabela('Entrada', '#entradas-tabela-corpo', '#entradas-resumo', '#entradas-de', '#entradas-ate');
 
   // ---- modal com linhas (lote)
-  function linhaHtml() {
-    return `<div class="mov-linha"><select class="mov-prod" aria-label="Produto">${produtos.map(p => `<option value="${p.id_produto}" data-un="${esc(p.unidade)}" data-est="${p.quantidade_estoque}">${esc(p.nome_produto)} (${GF.qty(p.quantidade_estoque)} ${esc(p.unidade)})</option>`).join('')}</select>
+  function linhaHtml(sel) {
+    return `<div class="mov-linha"><select class="mov-prod" aria-label="Produto">${produtos.map(p => `<option value="${p.id_produto}" data-un="${esc(p.unidade)}" data-est="${p.quantidade_estoque}"${p.id_produto === sel ? ' selected' : ''}>${esc(p.nome_produto)} (${GF.qty(p.quantidade_estoque)} ${esc(p.unidade)})</option>`).join('')}</select>
       <input type="number" class="mov-qtd" min="1" step="1" value="1" aria-label="Quantidade"><button type="button" class="btn-icon btn-action-cancel mov-rem" title="Remover linha" aria-label="Remover linha">✕</button></div>`;
   }
   function ajustaLinha(div) {
     const opt = $('.mov-prod', div).selectedOptions[0];
     GF.applyQtyAttrs($('.mov-qtd', div), opt.dataset.un);
   }
-  function addLinha() {
-    const box = $('#mov-linhas');
-    box.insertAdjacentHTML('beforeend', linhaHtml());
+  function addLinha(box = $('#mov-linhas'), sel) {
+    box.insertAdjacentHTML('beforeend', linhaHtml(sel));
     ajustaLinha(box.lastElementChild);
     GF.$$('.mov-rem', box).forEach(b => { b.style.visibility = box.children.length > 1 ? 'visible' : 'hidden'; });
   }
+
+  // Trocar produto ajusta a quantidade (inteira/fração); ✕ remove a linha (sempre fica ao menos uma).
+  function bindLinhas(box) {
+    box.addEventListener('change', e => { if (e.target.classList.contains('mov-prod')) ajustaLinha(e.target.closest('.mov-linha')); });
+    box.addEventListener('click', e => {
+      const b = e.target.closest('.mov-rem'); if (!b) return;
+      if (box.children.length > 1) { b.closest('.mov-linha').remove(); GF.$$('.mov-rem', box).forEach(x => { x.style.visibility = box.children.length > 1 ? 'visible' : 'hidden'; }); }
+    });
+  }
+
+  function lerLinhas(box) {
+    const itens = [];
+    for (const div of GF.$$('.mov-linha', box)) {
+      const q = $('.mov-qtd', div), v = Number(q.value);
+      if (!(v > 0)) { GF.marcarErro(q); GF.toast('Informe quantidades maiores que zero.', 'error'); return null; }
+      itens.push({ id_produto: Number($('.mov-prod', div).value), quantidade: v });
+    }
+    return itens;
+  }
+
+  // Perda/sobra (vencido, quebra, sobra do dia...): baixa no estoque valorizada pelo custo.
+  // `preset` permite abrir já com um produto (ex.: "dar baixa como vencido" no painel).
+  GF.abrirPerda = async (preset = {}) => {
+    try { produtos = (await GF.get('/api/products')).products.filter(p => p.quantidade_estoque > 0); } catch (e) { return; }
+    if (!produtos.length) { GF.toast('Não há produtos com estoque para registrar perda.', 'error'); return; }
+    const motivos = ['Vencido', 'Quebra/Avaria', 'Sobra do dia', 'Outro'];
+    GF.openModal({
+      title: 'Registrar Perda / Sobra',
+      wide: true,
+      html: `<div class="form-group"><label for="perda-motivo">Motivo *</label><select id="perda-motivo">${motivos.map(m => `<option${m === preset.motivo ? ' selected' : ''}>${m}</option>`).join('')}</select></div>
+        <div class="mov-lines-head"><span>Produto *</span><span>Quantidade *</span><span></span></div>
+        <div id="perda-linhas"></div>
+        <button type="button" class="btn btn-sm btn-secondary" id="perda-add">+ Adicionar outro item</button>
+        <div class="form-group mov-obs"><label for="perda-obs">Observação (obrigatória quando o motivo é "Outro"; mínimo 10 caracteres)</label>
+          <textarea id="perda-obs" rows="2" maxlength="5000" placeholder="Ex: Bandeja caiu no transporte para o balcão."></textarea></div>
+        <p class="muted" id="perda-valor"></p>
+        <div class="modal-actions"><button type="button" class="btn btn-secondary" data-cancel>Cancelar</button><button type="button" class="btn btn-danger" data-ok>Registrar perda</button></div>`,
+      onMount: m => {
+        const box = m.$('#perda-linhas');
+        bindLinhas(box);
+        addLinha(box, preset.id_produto);
+        if (preset.quantidade) $('.mov-qtd', box).value = preset.quantidade;
+        const valor = () => {
+          const total = GF.$$('.mov-linha', box).reduce((a, div) => {
+            const p = produtos.find(x => x.id_produto === Number($('.mov-prod', div).value));
+            return a + (p ? Number(p.preco_custo) * (Number($('.mov-qtd', div).value) || 0) : 0);
+          }, 0);
+          m.$('#perda-valor').textContent = `Valor perdido (preço de custo): ${GF.money(total)}`;
+        };
+        valor();
+        ['input', 'change', 'click'].forEach(ev => box.addEventListener(ev, () => setTimeout(valor)));
+        m.$('#perda-add').addEventListener('click', () => { addLinha(box); valor(); });
+        m.$('[data-cancel]').addEventListener('click', m.close);
+        m.$('[data-ok]').addEventListener('click', async () => {
+          GF.limparErros(m.el);
+          const itens = lerLinhas(box); if (!itens) return;
+          const motivo = m.$('#perda-motivo').value, obs = m.$('#perda-obs').value.trim();
+          if ((motivo === 'Outro' || obs) && obs.length < 10) { GF.marcarErro(m.$('#perda-obs')); GF.toast('A observação deve ter pelo menos 10 caracteres.', 'error'); return; }
+          const btn = m.$('[data-ok]'); btn.disabled = true;
+          try {
+            const r = await GF.post('/api/losses', { motivo_perda: motivo, itens, observacao: obs });
+            GF.toast(r.message, 'success');
+            m.close();
+            if (preset.aoSalvar) preset.aoSalvar(); else if (GF.state.currentView === 'saidas') carregarSaidas();
+          } catch (err) { /* toast exibido; nada foi gravado */ } finally { btn.disabled = false; }
+        });
+      }
+    });
+  };
 
   async function abrir(tipo) {
     try { produtos = (await GF.get('/api/products')).products; } catch (e) { return; }
@@ -54,12 +122,8 @@
   async function enviar(e) {
     e.preventDefault();
     GF.limparErros($('#form-movimentacao-modal'));
-    const itens = [];
-    for (const div of GF.$$('.mov-linha')) {
-      const q = $('.mov-qtd', div), v = Number(q.value);
-      if (!(v > 0)) { GF.marcarErro(q); GF.toast('Informe quantidades maiores que zero.', 'error'); return; }
-      itens.push({ id_produto: Number($('.mov-prod', div).value), quantidade: v });
-    }
+    const itens = lerLinhas($('#mov-linhas'));
+    if (!itens) return;
     const obs = $('#modal-mov-obs').value.trim();
     if (obs.length < 10) { GF.marcarErro($('#modal-mov-obs')); GF.toast('O motivo deve ter entre 10 e 5000 caracteres.', 'error'); return; }
     const btn = $('#btn-registrar-mov'); btn.disabled = true;
@@ -78,15 +142,11 @@
     $('#btn-registrar-saida-modal').addEventListener('click', () => abrir('Saída'));
     $('#btn-registrar-entrada-modal').addEventListener('click', () => abrir('Entrada'));
     ['#btn-fechar-modal-mov', '#btn-cancelar-modal-mov'].forEach(s => $(s).addEventListener('click', () => GF.hideModalStatic('#modal-movimentacao')));
-    $('#btn-mov-add-linha').addEventListener('click', addLinha);
+    $('#btn-mov-add-linha').addEventListener('click', () => addLinha());
+    $('#btn-registrar-perda').addEventListener('click', () => GF.abrirPerda());
     $('#form-movimentacao-modal').addEventListener('submit', enviar);
     GF.bindCounter($('#modal-mov-obs'), $('#mov-obs-counter'), 10, 5000);
-    const box = $('#mov-linhas');
-    box.addEventListener('change', e => { if (e.target.classList.contains('mov-prod')) ajustaLinha(e.target.closest('.mov-linha')); });
-    box.addEventListener('click', e => {
-      const b = e.target.closest('.mov-rem'); if (!b) return;
-      if (box.children.length > 1) { b.closest('.mov-linha').remove(); GF.$$('.mov-rem', box).forEach(x => { x.style.visibility = box.children.length > 1 ? 'visible' : 'hidden'; }); }
-    });
+    bindLinhas($('#mov-linhas'));
     [['#saidas-de', '#saidas-ate', carregarSaidas, '#saidas-limpar'], ['#entradas-de', '#entradas-ate', carregarEntradas, '#entradas-limpar']].forEach(([a, b, fn, l]) => {
       $(a).addEventListener('change', fn); $(b).addEventListener('change', fn);
       $(l).addEventListener('click', () => { $(a).value = ''; $(b).value = ''; fn(); });

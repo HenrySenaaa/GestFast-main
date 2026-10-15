@@ -1,17 +1,26 @@
 # GestFast ERP
 
-Sistema de gestão de estoque e vendas para panificadoras (projeto USCS - ADS). Back-end em Node.js **sem dependências externas** e front-end em HTML/CSS/JS puro.
+Sistema de gestão de estoque e vendas para panificadoras (projeto USCS - ADS). Back-end em Node.js (módulo `http`) com banco **MySQL 8**, e front-end em HTML/CSS/JS puro.
 
 ## Como executar
 
+1. **Criar o banco** no MySQL Workbench: abrir e executar `database/schema.sql` e depois `database/seed.sql`
+   (atenção: o `schema.sql` apaga e recria o banco `gestfast`). Para recomeçar do zero, rode os dois de novo.
+2. **Configurar a conexão**: copiar `.env.example` para `.env` e colocar a senha do seu MySQL.
+   O `.env` não vai para o Git.
+3. **Instalar e rodar** (Node 18 ou superior):
+
 ```bash
-node server.js          # http://localhost:3000   (Node 18 ou superior)
+npm install
+npm start               # http://localhost:3000
 npm test                # 16 testes automatizados da API (cenários do Apêndice F)
 ```
 
-Variáveis opcionais: `PORT`, `TZ` (padrão `America/Sao_Paulo`), `GESTFAST_DATA` (arquivo de dados) e `GESTFAST_LOG_DIR`.
+Os testes usam um banco separado, `gestfast_test`, que é apagado e recriado a cada execução (o banco
+`gestfast` não é tocado). Eles usam o mesmo usuário/senha do `.env`.
 
-No primeiro acesso são criados dados de exemplo em `data/gestfast.json`. Para recomeçar do zero, apague a pasta `data/`.
+Variáveis opcionais: `PORT`, `TZ` (padrão `America/Sao_Paulo`), `GESTFAST_UPLOAD_DIR` (imagens, padrão `data/uploads`)
+e `GESTFAST_LOG_DIR`.
 
 ## Usuários iniciais (altere as senhas em Funcionários / Configuração)
 
@@ -49,9 +58,9 @@ No primeiro acesso são criados dados de exemplo em `data/gestfast.json`. Para r
 
 ```
 server.js            API REST, autenticação, rotas e arquivos estáticos
-db.js                regras de negócio, validações e persistência (JSON atômico)
+db.js                regras de negócio, validações e consultas ao MySQL (transações)
 lib/                 auth (scrypt), permissões, logger, exportação PDF/XLSX, gateways simulados
 public/              interface (index.html, style.css, js/ por módulo)
-database/schema.sql  esquema relacional de referência (MySQL) para migração futura
-test/api.test.js     testes automatizados
+database/            schema.sql (tabelas), seed.sql (dados de exemplo), conexao.js (pool + transação)
+test/                api.test.js (testes) e setup-db.js (recria o banco gestfast_test)
 ```

@@ -1,20 +1,29 @@
 // Testes de API baseados nos cenários BDD do Apêndice F do relatório.  Execução: npm test
+// Rodam num banco MySQL separado (gestfast_test), recriado do zero a cada execução.
+// O MySQL e a senha vêm do .env (mesmo servidor do sistema); o banco "gestfast" não é tocado.
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gestfast-'));
-process.env.GESTFAST_DATA = path.join(tmp, 'db.json');
+process.env.DB_NAME = process.env.DB_TEST_NAME || 'gestfast_test';
+process.env.GESTFAST_UPLOAD_DIR = path.join(tmp, 'uploads');
 process.env.GESTFAST_LOG_DIR = path.join(tmp, 'logs');
 process.env.GESTFAST_QUIET = '1';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { recriarBancoDeTeste } = require('./setup-db');
 const server = require('../server');
 const db = require('../db');
+const saldo = async id => (await db.getProductById(id)).quantidade_estoque;
 
 let base;
-test.before(async () => { await new Promise(r => server.listen(0, r)); base = `http://localhost:${server.address().port}`; });
-test.after(() => server.close());
+test.before(async () => {
+  await recriarBancoDeTeste(process.env.DB_NAME);
+  await new Promise(r => server.listen(0, r));
+  base = `http://localhost:${server.address().port}`;
+});
+test.after(async () => { server.close(); await db.end(); });
 
 function cliente() {
   let cookie = '';
@@ -53,8 +62,9 @@ test('API exige autenticação e respeita perfis', async () => {
   assert.equal((await b.post('/api/sales', { itens: [] })).status, 403);
 });
 
-test('Senhas são armazenadas com hash (RNF 05)', () => {
-  assert.ok(db.usuarios.every(u => u.senha.startsWith('scrypt$')));
+test('Senhas são armazenadas com hash (RNF 05)', async () => {
+  const usuarios = await db.query('SELECT senha FROM usuario');
+  assert.ok(usuarios.length >= 3 && usuarios.every(u => u.senha.startsWith('scrypt$')));
 });
 
 test('Cenários 10-18: manter funcionários', async () => {
@@ -104,10 +114,10 @@ test('Cenários 19-27: manter produtos (validações, filtro, inativar)', async 
 
 test('Cenário 7: venda com baixa automática, quantidade inteira e preço dentro da faixa', async () => {
   const f = await func();
-  const antes = db.getProductById(8).quantidade_estoque;
+  const antes = await saldo(8);
   let r = await f.post('/api/sales', { itens: [{ id_produto: 8, quantidade: 3 }], forma_pagamento: 'PIX' });
   assert.equal(r.status, 201); assert.equal(r.message, 'Venda realizada com sucesso');
-  assert.equal(db.getProductById(8).quantidade_estoque, antes - 3);
+  assert.equal(await saldo(8), antes - 3);
   assert.equal(r.sale.valor_total, 18);
   // bug "quant" quebrado: 1,3 em UN deve ser recusado; em KG é aceito
   assert.match((await f.post('/api/sales', { itens: [{ id_produto: 1, quantidade: 1.3 }] })).error, /só aceita quantidades inteiras/);
@@ -123,24 +133,24 @@ test('Exceções de venda: estoque insuficiente, produto inexistente, cartão ne
   assert.match((await f.post('/api/sales', { itens: [{ id_produto: 8, quantidade: 10 }], desconto: 50, desconto_tipo: 'percentual' })).error, /limite permitido/);
   const a = await admin();
   await a.put('/api/settings', { simularCartaoNegado: true });
-  const estoque = db.getProductById(8).quantidade_estoque;
+  const estoque = await saldo(8);
   const neg = await f.post('/api/sales', { itens: [{ id_produto: 8, quantidade: 1 }], forma_pagamento: 'Cartão Crédito' });
   assert.equal(neg.error, 'Transação Negada pela Operadora');
-  assert.equal(db.getProductById(8).quantidade_estoque, estoque); // nada gravado
+  assert.equal(await saldo(8), estoque); // nada gravado
   await a.put('/api/settings', { simularCartaoNegado: false });
 });
 
 test('Cancelar/editar/excluir venda (cenários 8 e 9, RF 09)', async () => {
   const f = await func();
   const v = (await f.post('/api/sales', { itens: [{ id_produto: 8, quantidade: 2 }] })).sale;
-  const est = db.getProductById(8).quantidade_estoque;
+  const est = await saldo(8);
   // edição recalcula total e ajusta estoque
   let r = await f.put(`/api/sales/${v.id_venda}`, { itens: [{ id_produto: 8, quantidade: 5 }] });
-  assert.equal(r.sale.valor_total, 30); assert.equal(db.getProductById(8).quantidade_estoque, est - 3);
+  assert.equal(r.sale.valor_total, 30); assert.equal(await saldo(8), est - 3);
   // cancelamento exige senha de gerente
   assert.equal((await f.post(`/api/sales/${v.id_venda}/cancel`, { motivo: 'Cliente desistiu da compra', autorizador_email: 'henry@padarianovayork.com', autorizador_senha: 'func123' })).status, 403);
   r = await f.post(`/api/sales/${v.id_venda}/cancel`, { motivo: 'Cliente desistiu da compra', autorizador_email: 'proprietario@padarianovayork.com', autorizador_senha: 'admin123' });
-  assert.equal(r.sale.status_venda, 'Cancelada'); assert.equal(db.getProductById(8).quantidade_estoque, est + 2);
+  assert.equal(r.sale.status_venda, 'Cancelada'); assert.equal(await saldo(8), est + 2);
   assert.equal((await f.post(`/api/sales/${v.id_venda}/cancel`, { motivo: 'Cliente desistiu da compra', autorizador_email: 'proprietario@padarianovayork.com', autorizador_senha: 'admin123' })).status, 400);
   // exclusão: só administrador
   assert.equal((await f.del(`/api/sales/${v.id_venda}`, {})).status, 403);
@@ -156,12 +166,12 @@ test('Cenários 1-2: requisição ao fornecedor, recebimento parcial/total e can
   assert.equal(r.status, 201); assert.equal(r.message, 'Pedido realizado com sucesso');
   const id = r.requisicao.id_requisicao;
   assert.equal((await f.post('/api/requisitions', { ...base, fornecedor: 'Inventado' })).status, 400);
-  const est = db.getProductById(6).quantidade_estoque;
+  const est = await saldo(6);
   r = await f.patch(`/api/requisitions/${id}/status`, { situacao: 'Finalizado', quantidade_recebida: 4 });
-  assert.equal(r.requisicao.situacao, 'Em Aberto'); assert.equal(db.getProductById(6).quantidade_estoque, est + 4);
+  assert.equal(r.requisicao.situacao, 'Em Aberto'); assert.equal(await saldo(6), est + 4);
   assert.equal((await f.patch(`/api/requisitions/${id}/status`, { situacao: 'Finalizado', quantidade_recebida: 99 })).status, 400);
   r = await f.patch(`/api/requisitions/${id}/status`, { situacao: 'Finalizado' });
-  assert.equal(r.requisicao.situacao, 'Finalizado'); assert.equal(db.getProductById(6).quantidade_estoque, est + 10);
+  assert.equal(r.requisicao.situacao, 'Finalizado'); assert.equal(await saldo(6), est + 10);
   // funcionário não avança status (financeiro/backoffice)
   const r2 = (await f.post('/api/requisitions', base)).requisicao.id_requisicao;
   assert.equal((await f.patch(`/api/requisitions/${r2}/status`, { situacao: 'Cotado' })).status, 403);
@@ -181,23 +191,23 @@ test('Cenários 1-2: requisição ao fornecedor, recebimento parcial/total e can
 
 test('RF 04: movimentação individual e em lote, com atomicidade', async () => {
   const f = await func();
-  const e1 = db.getProductById(5).quantidade_estoque, e2 = db.getProductById(6).quantidade_estoque;
+  const e1 = await saldo(5), e2 = await saldo(6);
   let r = await f.post('/api/movements', { tipo_movimentacao: 'Entrada', observacao: 'Recebimento de caixa de insumos', itens: [{ id_produto: 5, quantidade: 10 }, { id_produto: 6, quantidade: 5 }] });
   assert.equal(r.status, 201); assert.equal(r.movements.length, 2);
-  assert.equal(db.getProductById(5).quantidade_estoque, e1 + 10);
+  assert.equal(await saldo(5), e1 + 10);
   r = await f.post('/api/movements', { tipo_movimentacao: 'Saída', observacao: 'Descarte por validade vencida', itens: [{ id_produto: 5, quantidade: 1 }, { id_produto: 6, quantidade: 9999 }] });
   assert.equal(r.status, 400);
-  assert.equal(db.getProductById(5).quantidade_estoque, e1 + 10); // rollback do lote
+  assert.equal(await saldo(5), e1 + 10); // rollback do lote
   assert.equal((await f.post('/api/movements', { tipo_movimentacao: 'Saída', observacao: 'curto', id_produto: 5, quantidade: 1 })).status, 400);
   assert.equal((await f.get('/api/movements?tipo=Entrada')).movements.every(m => m.tipo_movimentacao === 'Entrada'), true);
 });
 
 test('RF 06: conferência de estoque ajusta saldos e registra divergência', async () => {
   const f = await func();
-  const antes = db.getProductById(12).quantidade_estoque;
+  const antes = await saldo(12);
   const r = await f.post('/api/inventory', { observacao: 'Conferência quinzenal do estoque', itens: [{ id_produto: 12, quantidade_fisica: antes - 7 }] });
   assert.equal(r.status, 201); assert.equal(r.conferencia.itens[0].divergencia, -7);
-  assert.equal(db.getProductById(12).quantidade_estoque, antes - 7);
+  assert.equal(await saldo(12), antes - 7);
   assert.equal((await f.post('/api/inventory', { observacao: 'Conferência quinzenal do estoque', itens: [{ id_produto: 1, quantidade_fisica: 2.5 }] })).status, 400);
   assert.ok((await f.get('/api/inventory')).conferencias.length >= 2);
 });
@@ -229,11 +239,14 @@ test('Cenário 4 / RF 12-14: relatórios com filtros e exportação PDF e XLSX',
   assert.equal((await b.get('/api/reports/stock?format=doc')).status, 400);
 });
 
-test('Persistência e logs (RNF 06)', async () => {
-  assert.ok(fs.existsSync(process.env.GESTFAST_DATA));
-  const { Database } = db;
-  const copia = new Database(process.env.GESTFAST_DATA);
-  assert.equal(copia.vendas.length, db.vendas.length);
+test('Persistência no MySQL e logs (RNF 06)', async () => {
+  // Uma conexão nova (fora do pool do sistema) enxerga as mesmas vendas gravadas pela API.
+  const mysql = require('mysql2/promise');
+  const conn = await mysql.createConnection({ host: process.env.DB_HOST || 'localhost', port: Number(process.env.DB_PORT) || 3306, user: process.env.DB_USER || 'root', password: process.env.DB_PASSWORD || '', database: process.env.DB_NAME });
+  const [[{ n }]] = await conn.query('SELECT COUNT(*) AS n FROM venda');
+  await conn.end();
+  assert.equal(n, (await db.getVendas({})).length);
+  assert.ok(n > 6); // as 6 de exemplo + as criadas nos testes
   const a = await admin();
   const logs = (await a.get('/api/logs')).logs;
   assert.ok(logs.some(l => l.evento === 'login') && logs.some(l => l.evento === 'login_falhou') && logs.some(l => l.evento === 'operacao'));
@@ -243,7 +256,7 @@ test('Persistência e logs (RNF 06)', async () => {
 test('Recuperação de senha por link (fluxo de exceção IV)', async () => {
   const c = cliente();
   assert.equal((await c.post('/api/auth/forgot', { email: 'ninguem@x.com' })).status, 200);
-  const r = db.createResetToken('henry@padarianovayork.com');
+  const r = await db.createResetToken('henry@padarianovayork.com');
   assert.equal((await c.post('/api/auth/reset', { token: 'invalido', senha: 'novasenha1' })).status, 400);
   assert.equal((await c.post('/api/auth/reset', { token: r.token, senha: 'novasenha1' })).status, 200);
   assert.equal((await c.post('/api/auth/reset', { token: r.token, senha: 'outrasenha1' })).status, 400); // token de uso único

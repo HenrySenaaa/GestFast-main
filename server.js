@@ -1,4 +1,4 @@
-// server.js - Servidor HTTP e API RESTful do GestFast ERP (sem dependências externas)
+// server.js - Servidor HTTP e API RESTful do GestFast ERP (Node http + MySQL)
 process.env.TZ = process.env.TZ || 'America/Sao_Paulo';
 const http = require('http');
 const fs = require('fs');
@@ -11,7 +11,7 @@ const { buildXlsx, buildPdf } = require('./lib/export');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
-const UPLOAD_DIR = path.join(path.dirname(db.file === ':memory:' ? path.join(__dirname, 'data', 'x') : db.file), 'uploads');
+const UPLOAD_DIR = process.env.GESTFAST_UPLOAD_DIR || path.join(__dirname, 'data', 'uploads');
 const COOKIE = 'gf_session';
 const MAX_BODY = 4 * 1024 * 1024;
 
@@ -94,36 +94,36 @@ function exigir(ctx, perm) {
 }
 
 // ---------------- autenticação
-route('POST', '/api/auth/login', { public: true }, ctx => {
+route('POST', '/api/auth/login', { public: true }, async ctx => {
   const { email, senha, lembrar } = ctx.body;
   const chave = `${String(email || '').toLowerCase()}|${ctx.req.socket.remoteAddress}`;
   checarBloqueio(chave);
   let u;
-  try { u = db.authenticate(email, senha); } catch (e) {
+  try { u = await db.authenticate(email, senha); } catch (e) {
     if (e.status === 401) registrarFalha(chave);
     logger.log('AVISO', 'login_falhou', { email: String(email || '').slice(0, 100), motivo: e.message });
     throw e;
   }
   tentativas.delete(chave);
-  const s = db.createSession(u.id_usuario, lembrar);
+  const s = await db.createSession(u.id_usuario, lembrar);
   logger.log('INFO', 'login', {}, u.email);
-  return { ...ok({ message: 'Login realizado com sucesso', user: db.publicUser(u), permissoes: listFor(db.nomePerfil(u.id_perfil)) }), headers: { 'Set-Cookie': cookieHeader(s.token, s.maxAgeSeg) } };
+  return { ...ok({ message: 'Login realizado com sucesso', user: db.publicUser(u), permissoes: listFor(u.nome_perfil) }), headers: { 'Set-Cookie': cookieHeader(s.token, s.maxAgeSeg) } };
 });
 
-route('POST', '/api/auth/logout', { public: true }, ctx => {
+route('POST', '/api/auth/logout', { public: true }, async ctx => {
   const token = parseCookies(ctx.req)[COOKIE];
   if (ctx.user) logger.log('INFO', 'logout', {}, ctx.user.email);
-  db.deleteSession(token);
+  await db.deleteSession(token);
   return { ...ok({ message: 'Sessão encerrada.' }), headers: { 'Set-Cookie': clearCookie } };
 });
 
-route('GET', '/api/auth/me', { public: true }, ctx => {
+route('GET', '/api/auth/me', { public: true }, async ctx => {
   if (!ctx.user) throw new HttpError(401, 'Sessão expirada. Faça login novamente.');
-  return ok({ user: ctx.user, permissoes: listFor(ctx.user.perfil), settings: db.getSettings(), hoje: hojeISO() });
+  return ok({ user: ctx.user, permissoes: listFor(ctx.user.perfil), settings: await db.getSettings(), hoje: hojeISO() });
 });
 
-route('POST', '/api/auth/forgot', { public: true }, ctx => {
-  const r = db.createResetToken(ctx.body.email);
+route('POST', '/api/auth/forgot', { public: true }, async ctx => {
+  const r = await db.createResetToken(ctx.body.email);
   if (r) {
     // Sem servidor SMTP configurado, o link é registrado no console/log (simulação de envio de e-mail).
     const link = `http://localhost:${PORT}/#reset=${r.token}`;
@@ -133,43 +133,43 @@ route('POST', '/api/auth/forgot', { public: true }, ctx => {
   return ok({ message: 'Se o e-mail estiver cadastrado, enviaremos um link de redefinição.' });
 });
 
-route('POST', '/api/auth/reset', { public: true }, ctx => {
-  const u = db.resetPassword(ctx.body.token, ctx.body.senha);
+route('POST', '/api/auth/reset', { public: true }, async ctx => {
+  const u = await db.resetPassword(ctx.body.token, ctx.body.senha);
   logger.log('INFO', 'senha_redefinida', {}, u.email);
   return ok({ message: 'Senha redefinida com sucesso. Faça login com a nova senha.' });
 });
 
-route('POST', '/api/auth/change-password', {}, ctx => {
-  db.changePassword(ctx.user.id_usuario, ctx.body.senha_atual, ctx.body.nova_senha);
+route('POST', '/api/auth/change-password', {}, async ctx => {
+  await db.changePassword(ctx.user.id_usuario, ctx.body.senha_atual, ctx.body.nova_senha);
   return ok({ message: 'Senha alterada com sucesso!' });
 });
 
 // ---------------- busca global
-route('GET', '/api/search', {}, ctx => ok({ results: db.buscaGlobal(ctx.query.q, perm => can(ctx.user.perfil, perm)) }));
+route('GET', '/api/search', {}, async ctx => ok({ results: await db.buscaGlobal(ctx.query.q, perm => can(ctx.user.perfil, perm)) }));
 
 // ---------------- dashboard e dados de apoio
-route('GET', '/api/dashboard', { perm: 'dashboard:ver' }, ctx => {
+route('GET', '/api/dashboard', { perm: 'dashboard:ver' }, async ctx => {
   const t0 = Date.now();
-  const data = db.getDashboardData(ctx.user);
+  const data = await db.getDashboardData(ctx.user);
   return ok({ data, latencyMs: Date.now() - t0 });
 });
-route('GET', '/api/alerts', { perm: 'dashboard:ver' }, () => ok({ alerts: db.getAlertasCriticos() }));
-route('GET', '/api/categories', {}, () => ok({ categories: db.categorias }));
-route('GET', '/api/suppliers', {}, () => ok({ suppliers: db.fornecedores }));
-route('GET', '/api/profiles', { perm: 'usuarios:gerir' }, () => ok({ profiles: db.perfis }));
-route('GET', '/api/settings', {}, ctx => ok({ settings: db.getSettings(), hoje: hojeISO() }));
-route('PUT', '/api/settings', { perm: 'config:gerir' }, ctx => ok({ settings: db.updateSettings(ctx.body), message: 'Configurações salvas com sucesso!' }));
-route('GET', '/api/logs', { perm: 'logs:ver' }, ctx => ok({ logs: logger.recent(Math.min(Number(ctx.query.limit) || 200, 1000)) }));
+route('GET', '/api/alerts', { perm: 'dashboard:ver' }, async () => ok({ alerts: await db.getAlertasCriticos() }));
+route('GET', '/api/categories', {}, async () => ok({ categories: await db.listCategorias() }));
+route('GET', '/api/suppliers', {}, async () => ok({ suppliers: await db.listFornecedores() }));
+route('GET', '/api/profiles', { perm: 'usuarios:gerir' }, async () => ok({ profiles: await db.listPerfis() }));
+route('GET', '/api/settings', {}, async ctx => ok({ settings: await db.getSettings(), hoje: hojeISO() }));
+route('PUT', '/api/settings', { perm: 'config:gerir' }, async ctx => ok({ settings: await db.updateSettings(ctx.body), message: 'Configurações salvas com sucesso!' }));
+route('GET', '/api/logs', { perm: 'logs:ver' }, async ctx => ok({ logs: logger.recent(Math.min(Number(ctx.query.limit) || 200, 1000)) }));
 
 // ---------------- funcionários
-route('GET', '/api/users', { perm: 'usuarios:gerir' }, ctx => ok({ users: db.listUsers({ q: ctx.query.q, id_perfil: ctx.query.id_perfil, status: ctx.query.status }) }));
-route('POST', '/api/users', { perm: 'usuarios:gerir' }, ctx => {
-  const u = db.createUser(ctx.body);
+route('GET', '/api/users', { perm: 'usuarios:gerir' }, async ctx => ok({ users: await db.listUsers({ q: ctx.query.q, id_perfil: ctx.query.id_perfil, status: ctx.query.status }) }));
+route('POST', '/api/users', { perm: 'usuarios:gerir' }, async ctx => {
+  const u = await db.createUser(ctx.body);
   return ok({ user: u, message: 'Funcionário cadastrado com sucesso!' }, 201);
 });
-route('PUT', '/api/users/:id', { perm: 'usuarios:gerir' }, ctx => ok({ user: db.updateUser(ctx.params.id, ctx.body, ctx.user), message: 'Funcionário atualizado com sucesso!' }));
-route('PATCH', '/api/users/:id/status', { perm: 'usuarios:gerir' }, ctx => {
-  const u = db.setUserStatus(ctx.params.id, ctx.body.status, ctx.user);
+route('PUT', '/api/users/:id', { perm: 'usuarios:gerir' }, async ctx => ok({ user: await db.updateUser(ctx.params.id, ctx.body, ctx.user), message: 'Funcionário atualizado com sucesso!' }));
+route('PATCH', '/api/users/:id/status', { perm: 'usuarios:gerir' }, async ctx => {
+  const u = await db.setUserStatus(ctx.params.id, ctx.body.status, ctx.user);
   return ok({ user: u, message: u.status === 'Ativo' ? 'Acesso do funcionário reativado!' : 'Acesso do funcionário desativado com sucesso!' });
 });
 
@@ -186,44 +186,44 @@ function salvarImagem(dataUrl, idRef) {
   return `uploads/${nome}`;
 }
 
-route('GET', '/api/products', { perm: 'produtos:ver' }, ctx => ok({ products: db.getProducts(ctx.query.q, ctx.query.category, ctx.query.status || 'Ativo') }));
-route('GET', '/api/products/:id', { perm: 'produtos:ver' }, ctx => {
-  const p = db.getProductById(ctx.params.id);
+route('GET', '/api/products', { perm: 'produtos:ver' }, async ctx => ok({ products: await db.getProducts(ctx.query.q, ctx.query.category, ctx.query.status || 'Ativo') }));
+route('GET', '/api/products/:id', { perm: 'produtos:ver' }, async ctx => {
+  const p = await db.getProductById(ctx.params.id);
   if (!p) throw new HttpError(404, 'Produto não encontrado');
   return ok({ product: p });
 });
-route('POST', '/api/products', { perm: 'produtos:editar' }, ctx => {
+route('POST', '/api/products', { perm: 'produtos:editar' }, async ctx => {
   const { imagem_data, ...dados } = ctx.body;
   if (imagem_data) dados.imagem = salvarImagem(imagem_data, 'novo');
-  return ok({ product: db.saveProduct(dados), message: 'Produto cadastrado com sucesso!' }, 201);
+  return ok({ product: await db.saveProduct(dados), message: 'Produto cadastrado com sucesso!' }, 201);
 });
-route('PUT', '/api/products/:id', { perm: 'produtos:editar' }, ctx => {
+route('PUT', '/api/products/:id', { perm: 'produtos:editar' }, async ctx => {
   const { imagem_data, ...dados } = ctx.body;
   dados.id_produto = ctx.params.id;
   if (imagem_data) dados.imagem = salvarImagem(imagem_data, ctx.params.id);
-  return ok({ product: db.saveProduct(dados), message: 'Produto atualizado com sucesso!' });
+  return ok({ product: await db.saveProduct(dados), message: 'Produto atualizado com sucesso!' });
 });
-route('DELETE', '/api/products/:id', { perm: 'produtos:editar' }, ctx => {
-  db.setProductStatus(ctx.params.id, 'Inativo');
+route('DELETE', '/api/products/:id', { perm: 'produtos:editar' }, async ctx => {
+  await db.setProductStatus(ctx.params.id, 'Inativo');
   return ok({ message: 'Produto inativado do catálogo com sucesso!' });
 });
-route('PATCH', '/api/products/:id/status', { perm: 'produtos:editar' }, ctx => {
-  const p = db.setProductStatus(ctx.params.id, ctx.body.status);
+route('PATCH', '/api/products/:id/status', { perm: 'produtos:editar' }, async ctx => {
+  const p = await db.setProductStatus(ctx.params.id, ctx.body.status);
   return ok({ product: p, message: p.status === 'Ativo' ? 'Produto reativado no catálogo!' : 'Produto inativado do catálogo com sucesso!' });
 });
 
 // ---------------- requisições
-route('GET', '/api/requisitions', { perm: 'requisicoes:ver' }, () => ok({ requisicoes: db.requisicoes }));
-route('GET', '/api/requisitions/:id', { perm: 'requisicoes:ver' }, ctx => {
-  const r = db.getRequisicao(ctx.params.id);
+route('GET', '/api/requisitions', { perm: 'requisicoes:ver' }, async () => ok({ requisicoes: await db.listRequisicoes() }));
+route('GET', '/api/requisitions/:id', { perm: 'requisicoes:ver' }, async ctx => {
+  const r = await db.getRequisicao(ctx.params.id);
   if (!r) throw new HttpError(404, 'Requisição não encontrada');
   return ok({ requisicao: r });
 });
-route('POST', '/api/requisitions', { perm: 'requisicoes:criar' }, ctx => ok({ requisicao: db.createRequisicao(ctx.body, ctx.user), message: 'Pedido realizado com sucesso' }, 201));
-route('PATCH', '/api/requisitions/:id/status', {}, ctx => {
+route('POST', '/api/requisitions', { perm: 'requisicoes:criar' }, async ctx => ok({ requisicao: await db.createRequisicao(ctx.body, ctx.user), message: 'Pedido realizado com sucesso' }, 201));
+route('PATCH', '/api/requisitions/:id/status', {}, async ctx => {
   const sit = ctx.body.situacao;
   exigir(ctx, sit === 'Cancelado' ? 'requisicoes:cancelar' : sit === 'Finalizado' ? 'requisicoes:receber' : 'requisicoes:avancar');
-  const r = db.updateRequisicaoStatus(ctx.params.id, ctx.body, ctx.user);
+  const r = await db.updateRequisicaoStatus(ctx.params.id, ctx.body, ctx.user);
   const msg = sit === 'Cancelado' ? 'Solicitação de cancelamento encaminhada com sucesso'
     : sit === 'Finalizado' ? (r.parcial ? 'Recebimento parcial registrado e estoque atualizado!' : 'Mercadoria recebida e estoque atualizado!')
       : `Requisição atualizada para "${r.situacao}"!`;
@@ -231,68 +231,68 @@ route('PATCH', '/api/requisitions/:id/status', {}, ctx => {
 });
 
 // ---------------- movimentações
-route('GET', '/api/movements', { perm: 'movimentos:ver' }, ctx => ok({ movements: db.getMovimentacoes({ tipo: ctx.query.tipo, from: ctx.query.from, to: ctx.query.to }) }));
-route('POST', '/api/movements', { perm: 'movimentos:registrar' }, ctx => {
-  const movs = db.registrarMovimentacoes(ctx.body, ctx.user);
+route('GET', '/api/movements', { perm: 'movimentos:ver' }, async ctx => ok({ movements: await db.getMovimentacoes({ tipo: ctx.query.tipo, from: ctx.query.from, to: ctx.query.to }) }));
+route('POST', '/api/movements', { perm: 'movimentos:registrar' }, async ctx => {
+  const movs = await db.registrarMovimentacoes(ctx.body, ctx.user);
   const tipo = ctx.body.tipo_movimentacao;
   return ok({ movements: movs, movement: movs[0], message: movs.length > 1 ? `${tipo} em lote registrada (${movs.length} itens)!` : `${tipo} registrada com sucesso!` }, 201);
 });
 
 // ---------------- vendas
-route('GET', '/api/sales', { perm: 'vendas:ver' }, ctx => ok({ sales: db.getVendas({ from: ctx.query.from, to: ctx.query.to, q: ctx.query.q, status: ctx.query.status }) }));
-route('GET', '/api/sales/:id', { perm: 'vendas:ver' }, ctx => {
-  const v = db.getVenda(ctx.params.id);
+route('GET', '/api/sales', { perm: 'vendas:ver' }, async ctx => ok({ sales: await db.getVendas({ from: ctx.query.from, to: ctx.query.to, q: ctx.query.q, status: ctx.query.status }) }));
+route('GET', '/api/sales/:id', { perm: 'vendas:ver' }, async ctx => {
+  const v = await db.getVenda(ctx.params.id);
   if (!v) throw new HttpError(404, 'Venda não encontrada');
   return ok({ sale: v });
 });
-route('POST', '/api/sales', { perm: 'vendas:vender' }, ctx => ok({ sale: db.realizarVenda(ctx.body, ctx.user), message: 'Venda realizada com sucesso' }, 201));
-route('PUT', '/api/sales/:id', { perm: 'vendas:editar' }, ctx => ok({ sale: db.editarVenda(ctx.params.id, ctx.body, ctx.user), message: 'Venda atualizada com sucesso' }));
-route('POST', '/api/sales/:id/cancel', { perm: 'vendas:cancelar' }, ctx => {
-  const aut = db.authorizeManager(ctx.body.autorizador_email, ctx.body.autorizador_senha);
-  const v = db.cancelarVenda(ctx.params.id, ctx.body, ctx.user, aut);
+route('POST', '/api/sales', { perm: 'vendas:vender' }, async ctx => ok({ sale: await db.realizarVenda(ctx.body, ctx.user), message: 'Venda realizada com sucesso' }, 201));
+route('PUT', '/api/sales/:id', { perm: 'vendas:editar' }, async ctx => ok({ sale: await db.editarVenda(ctx.params.id, ctx.body, ctx.user), message: 'Venda atualizada com sucesso' }));
+route('POST', '/api/sales/:id/cancel', { perm: 'vendas:cancelar' }, async ctx => {
+  const aut = await db.authorizeManager(ctx.body.autorizador_email, ctx.body.autorizador_senha);
+  const v = await db.cancelarVenda(ctx.params.id, ctx.body, ctx.user, aut);
   logger.log('INFO', 'venda_cancelada', { venda: v.codigo_venda, autorizadaPor: aut.email }, ctx.user.email);
   return ok({ sale: v, message: 'Venda cancelada e estoque estornado!' });
 });
-route('DELETE', '/api/sales/:id', { perm: 'vendas:excluir' }, ctx => {
-  db.authorizeManager(ctx.body.autorizador_email, ctx.body.autorizador_senha, ['Administrador']);
-  const v = db.excluirVenda(ctx.params.id, ctx.user);
+route('DELETE', '/api/sales/:id', { perm: 'vendas:excluir' }, async ctx => {
+  await db.authorizeManager(ctx.body.autorizador_email, ctx.body.autorizador_senha, ['Administrador']);
+  const v = await db.excluirVenda(ctx.params.id, ctx.user);
   return ok({ message: 'Venda excluída com sucesso' , sale: v });
 });
 
 // ---------------- conferência
-route('GET', '/api/inventory', { perm: 'estoque:conferir' }, () => ok({ conferencias: db.conferencias, itensParaConferencia: db.produtos.filter(p => p.status === 'Ativo') }));
-route('POST', '/api/inventory', { perm: 'estoque:conferir' }, ctx => ok({ conferencia: db.salvarConferencia(ctx.body, ctx.user), message: 'Conferência de estoque salva com sucesso!' }, 201));
+route('GET', '/api/inventory', { perm: 'estoque:conferir' }, async () => ok({ conferencias: await db.listConferencias(), itensParaConferencia: await db.listProdutosAtivos() }));
+route('POST', '/api/inventory', { perm: 'estoque:conferir' }, async ctx => ok({ conferencia: await db.salvarConferencia(ctx.body, ctx.user), message: 'Conferência de estoque salva com sucesso!' }, 201));
 
 // ---------------- relatórios (+ exportação PDF/XLSX)
 const brl = n => `R$ ${Number(n).toFixed(2).replace('.', ',')}`;
 const num = n => String(Number(n)).replace('.', ',');
 const dataBR = s => (s ? s.split('-').reverse().join('/') : '');
-function descPeriodo(f) {
-  const cat = f.categoria ? (db.categorias.find(c => c.id_categoria === f.categoria) || {}).nome_categoria : 'Todas as categorias';
+function descPeriodo(f, categorias) {
+  const cat = f.categoria ? (categorias.find(c => c.id_categoria === f.categoria) || {}).nome_categoria : 'Todas as categorias';
   const per = f.from || f.to ? `${f.from ? dataBR(f.from) : 'início'} a ${f.to ? dataBR(f.to) : 'hoje'}` : 'Todo o período';
   return `Período: ${per}  |  Categoria: ${cat}`;
 }
 
-function entregarRelatorio(ctx, tipo, dados, montar) {
+async function entregarRelatorio(ctx, tipo, dados, montar) {
   const formato = (ctx.query.format || 'json').toLowerCase();
-  db.registrarRelatorio(`${tipo} (${formato})`, ctx.user.id_usuario);
+  await db.registrarRelatorio(`${tipo} (${formato})`, ctx.user.id_usuario);
   if (formato === 'json') return ok({ report: dados });
-  const m = montar(dados);
+  const m = montar(dados, await db.listCategorias());
   const stamp = `${hojeISO()}`;
   if (formato === 'xlsx') {
     return { raw: true, status: 200, headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="gestfast-${tipo}-${stamp}.xlsx"` }, body: buildXlsx(m.sheets) };
   }
   if (formato === 'pdf') {
-    return { raw: true, status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="gestfast-${tipo}-${stamp}.pdf"` }, body: buildPdf({ title: m.titulo, subtitle: m.subtitulo, sections: m.sections, footer: `GestFast - ${db.getSettings().estabelecimento} - gerado em ${db.util.dataHora()} por ${ctx.user.nome}`, landscape: m.landscape }) };
+    return { raw: true, status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="gestfast-${tipo}-${stamp}.pdf"` }, body: buildPdf({ title: m.titulo, subtitle: m.subtitulo, sections: m.sections, footer: `GestFast - ${(await db.getSettings()).estabelecimento} - gerado em ${db.util.dataHora()} por ${ctx.user.nome}`, landscape: m.landscape }) };
   }
   throw new HttpError(400, 'Formato inválido. Use json, pdf ou xlsx.');
 }
 
-route('GET', '/api/reports/sales', { perm: 'relatorios:ver' }, ctx => {
-  const r = db.getRelatorioVendas({ from: ctx.query.from, to: ctx.query.to, categoria: ctx.query.categoria });
-  return entregarRelatorio(ctx, 'vendas', r, d => {
+route('GET', '/api/reports/sales', { perm: 'relatorios:ver' }, async ctx => {
+  const r = await db.getRelatorioVendas({ from: ctx.query.from, to: ctx.query.to, categoria: ctx.query.categoria });
+  return entregarRelatorio(ctx, 'vendas', r, (d, cats) => {
     const resumo = [
-      `${descPeriodo(d.filtros)}`,
+      `${descPeriodo(d.filtros, cats)}`,
       `Transações: ${d.quantidadeTransacoes}  |  Bruto: ${brl(d.totalBruto)}  |  Descontos: ${brl(d.totalDescontos)}  |  Faturamento: ${brl(d.totalGeral)}  |  Ticket médio: ${brl(d.ticketMedio)}`
     ];
     const colItens = [{ label: 'Produto', width: 36 }, { label: 'Categoria', width: 24 }, { label: 'Unid', width: 8 }, { label: 'Valor médio', width: 14, fmt: 'money' }, { label: 'Quant.', width: 10, fmt: 'dec' }, { label: 'Total bruto', width: 14, fmt: 'money' }];
@@ -316,10 +316,10 @@ route('GET', '/api/reports/sales', { perm: 'relatorios:ver' }, ctx => {
   });
 });
 
-route('GET', '/api/reports/stock', { perm: 'relatorios:ver' }, ctx => {
-  const r = db.getRelatorioEstoque({ from: ctx.query.from, to: ctx.query.to, categoria: ctx.query.categoria });
-  return entregarRelatorio(ctx, 'estoque', r, d => {
-    const sub = [descPeriodo(d.filtros), `Produtos: ${d.totalProdutos}  |  Em nível crítico: ${d.totalCriticos}  |  Valor em estoque (custo): ${brl(d.valorTotalEstoque)}`];
+route('GET', '/api/reports/stock', { perm: 'relatorios:ver' }, async ctx => {
+  const r = await db.getRelatorioEstoque({ from: ctx.query.from, to: ctx.query.to, categoria: ctx.query.categoria });
+  return entregarRelatorio(ctx, 'estoque', r, (d, cats) => {
+    const sub = [descPeriodo(d.filtros, cats), `Produtos: ${d.totalProdutos}  |  Em nível crítico: ${d.totalCriticos}  |  Valor em estoque (custo): ${brl(d.valorTotalEstoque)}`];
     return {
       titulo: 'Relatório de Estoque (entradas, saídas e saldo)', subtitulo: sub, landscape: true,
       sheets: [{
@@ -352,7 +352,7 @@ const server = http.createServer(async (req, res) => {
       const params = {};
       rota.keys.forEach((k, i) => { params[k] = m[i + 1]; });
       const token = parseCookies(req)[COOKIE];
-      const dbUser = db.getSessionUser(token);
+      const dbUser = await db.getSessionUser(token);
       const user = dbUser ? db.publicUser(dbUser) : null;
       if (!rota.opts.public && !user) throw new HttpError(401, 'Sessão expirada. Faça login novamente.');
       const ctx = { req, res, params, query: Object.fromEntries(u.searchParams), user, body: {} };
@@ -404,9 +404,15 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, () => {
-    console.log(`[GestFast ERP] Servidor rodando em http://localhost:${PORT}`);
-    console.log('[GestFast ERP] Dados em:', db.file);
+  db.testarConexao().then(() => {
+    server.listen(PORT, () => {
+      console.log(`[GestFast ERP] Servidor rodando em http://localhost:${PORT}`);
+      console.log(`[GestFast ERP] Banco MySQL: ${process.env.DB_NAME || 'gestfast'} em ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 3306}`);
+    });
+  }).catch(err => {
+    console.error('[GestFast ERP] Não foi possível conectar ao MySQL:', err.code || err.message);
+    console.error('Confira se o MySQL está rodando e se o arquivo .env existe com a senha certa (modelo em .env.example).');
+    process.exit(1);
   });
 }
 

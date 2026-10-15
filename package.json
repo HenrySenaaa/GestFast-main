@@ -1,0 +1,21 @@
+{
+  "name": "gestfast",
+  "version": "1.3.0",
+  "description": "GestFast - Solução de gestão para panificadoras e comércios (USCS - ADS)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test --test-concurrency=1 test/api.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HenrySenaaa/GestFast-main.git"
+  },
+  "engines": { "node": ">=18" },
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "dotenv": "^18.0.7",
+    "mysql2": "^3.24.6"
+  }
+}

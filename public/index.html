@@ -153,6 +153,10 @@
               <div class="figma-card-header"><h2>Alertas</h2></div>
               <div class="figma-card-body"><div id="dash-alertas-figma-list" class="alertas-figma-list"></div></div>
             </div>
+            <div class="figma-card card-validade">
+              <div class="figma-card-header"><h2>Validade</h2><span class="toolbar-hint" id="dash-validade-resumo"></span></div>
+              <div class="figma-card-body"><div id="dash-validade-list" class="alertas-figma-list"></div></div>
+            </div>
             <div class="figma-card card-compras">
               <div class="figma-card-header">
                 <h2>Compras</h2>
@@ -193,12 +197,13 @@
             <input type="text" id="estoque-filtro-termo" placeholder="Filtrar por descrição ou código..." class="input-search" aria-label="Filtrar estoque por termo">
             <select id="estoque-filtro-categoria" class="select-field" aria-label="Filtrar por Categoria"><option value="">Todas as Categorias</option></select>
             <label class="checkbox-label"><input type="checkbox" id="estoque-apenas-criticos"> Apenas nível crítico</label>
+            <label class="checkbox-label"><input type="checkbox" id="estoque-apenas-validade"> Apenas vencidos / vencendo</label>
             <span class="toolbar-hint is-hidden" id="estoque-resumo"></span>
             <button class="btn btn-sm btn-secondary toolbar-end" id="btn-historico-conferencias" type="button">🕘 Histórico de conferências</button>
           </div>
           <div class="table-responsive">
             <table class="figma-styled-table">
-              <thead><tr><th>Descrição</th><th>Unid</th><th>Estoque</th><th>Lote</th><th>Contagem Física</th><th>Divergência</th></tr></thead>
+              <thead><tr><th>Descrição</th><th>Unid</th><th>Estoque</th><th>Lote</th><th>Validade</th><th>Contagem Física</th><th>Divergência</th></tr></thead>
               <tbody id="estoque-tabela-corpo"></tbody>
             </table>
           </div>
@@ -338,7 +343,10 @@
       <section id="view-saidas" class="app-view">
         <div class="figma-tab-header">
           <div class="figma-tab-title-pill">Saída de produtos</div>
-          <button class="btn btn-danger" id="btn-registrar-saida-modal" data-perm="movimentos:registrar">+ Registrar Nova Saída</button>
+          <div class="tab-header-actions">
+            <button class="btn btn-secondary" id="btn-registrar-perda" data-perm="movimentos:registrar">🗑️ Registrar Perda / Sobra</button>
+            <button class="btn btn-danger" id="btn-registrar-saida-modal" data-perm="movimentos:registrar">+ Registrar Nova Saída</button>
+          </div>
         </div>
         <div class="figma-card full-panel">
           <div class="filter-toolbar is-hidden">
@@ -490,6 +498,7 @@
             <div class="rel-tabs" role="tablist">
               <button class="rel-tab active" role="tab" data-rel="vendas" type="button">Vendas</button>
               <button class="rel-tab" role="tab" data-rel="estoque" type="button">Estoque</button>
+              <button class="rel-tab" role="tab" data-rel="perdas" type="button">Perdas</button>
             </div>
             <label class="inline-field">De <input type="date" id="rel-de" class="select-field"></label>
             <label class="inline-field">Até <input type="date" id="rel-ate" class="select-field"></label>
@@ -554,6 +563,10 @@
             <div class="form-row">
               <div class="form-group flex-1"><label for="cfg-desconto">Desconto máximo no caixa (% do subtotal)</label><input type="number" id="cfg-desconto" min="0" max="100" step="1"></div>
               <div class="form-group flex-1"><label for="cfg-intervalo">Atualização do painel (segundos)</label><input type="number" id="cfg-intervalo" min="2" max="60" step="1"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group flex-1"><label for="cfg-validade">Aviso de validade (dias de antecedência)</label><input type="number" id="cfg-validade" min="0" max="60" step="1"></div>
+              <div class="form-group flex-1"></div>
             </div>
             <fieldset class="cfg-sim">
               <legend>Simulação de falhas externas (para testes e demonstração)</legend>

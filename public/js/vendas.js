@@ -69,7 +69,7 @@
     b.classList.toggle('stock-low', troco < 0);
   }
 
-  function adicionar() {
+  async function adicionar() {
     const p = prod($('#pdv-produto-select').value);
     const qEl = $('#pdv-quantidade');
     if (!p) { GF.toast('Selecione um produto para inserir no pedido.', 'error'); $('#pdv-produto-select').focus(); return; }
@@ -78,6 +78,8 @@
     if (!GF.fractional(p.unidade) && !Number.isInteger(q)) { GF.marcarErro(qEl); GF.toast(`${p.nome_produto} é vendido em ${p.unidade}: informe uma quantidade inteira.`, 'error'); qEl.value = Math.max(1, Math.round(q)); return; }
     const disp = round(p.quantidade_estoque - noCarrinho(p.id_produto), 3);
     if (q > disp) { GF.marcarErro(qEl); GF.toast(`Quantidade indisponível em estoque! Disponível: ${GF.qty(disp)} ${p.unidade}.`, 'error'); return; }
+    const val = GF.validade(p.validade);
+    if (val && val.vencido && !(await GF.confirm(`"${p.nome_produto}" está VENCIDO (validade ${GF.date(p.validade)}). Deseja adicionar ao pedido mesmo assim?`, { okLabel: 'Adicionar mesmo assim', danger: true, title: 'Produto vencido' }))) return;
     const ex = cart.find(i => i.id_produto === p.id_produto);
     if (ex) ex.qtd = round(ex.qtd + q, 3);
     else cart.push({ id_produto: p.id_produto, nome: p.nome_produto, unidade: p.unidade, preco: p.preco_venda, qtd: round(q, 3) });

@@ -238,6 +238,14 @@ route('POST', '/api/movements', { perm: 'movimentos:registrar' }, async ctx => {
   return ok({ movements: movs, movement: movs[0], message: movs.length > 1 ? `${tipo} em lote registrada (${movs.length} itens)!` : `${tipo} registrada com sucesso!` }, 201);
 });
 
+// ---------------- validade e perdas/sobras
+route('GET', '/api/expiring', { perm: 'produtos:ver' }, async () => ok(await db.getValidades()));
+route('POST', '/api/losses', { perm: 'movimentos:registrar' }, async ctx => {
+  const movs = await db.registrarPerdas(ctx.body, ctx.user);
+  logger.log('INFO', 'perda_registrada', { motivo: ctx.body.motivo_perda, itens: movs.length }, ctx.user.email);
+  return ok({ movements: movs, message: movs.length > 1 ? `Perda registrada (${movs.length} itens) e estoque atualizado!` : 'Perda registrada e estoque atualizado!' }, 201);
+});
+
 // ---------------- vendas
 route('GET', '/api/sales', { perm: 'vendas:ver' }, async ctx => ok({ sales: await db.getVendas({ from: ctx.query.from, to: ctx.query.to, q: ctx.query.q, status: ctx.query.status }) }));
 route('GET', '/api/sales/:id', { perm: 'vendas:ver' }, async ctx => {
@@ -331,6 +339,32 @@ route('GET', '/api/reports/stock', { perm: 'relatorios:ver' }, async ctx => {
         columns: [{ label: 'Código', w: 1.6 }, { label: 'Produto', w: 4.5 }, { label: 'Categoria', w: 3 }, { label: 'Unid', w: 1 }, { label: 'Entradas', w: 1.4, align: 'right' }, { label: 'Saídas', w: 1.4, align: 'right' }, { label: 'Saldo', w: 1.4, align: 'right' }, { label: 'Mín.', w: 1.2, align: 'right' }, { label: 'Situação', w: 1.6 }],
         rows: d.linhas.map(l => [l.codigo_barras, l.nome_produto, l.categoria, l.unidade, num(l.entradas), num(l.saidas), num(l.saldo_atual), num(l.estoque_minimo), l.situacao])
       }]
+    };
+  });
+});
+
+route('GET', '/api/reports/losses', { perm: 'relatorios:ver' }, async ctx => {
+  const r = await db.getRelatorioPerdas({ from: ctx.query.from, to: ctx.query.to, categoria: ctx.query.categoria });
+  return entregarRelatorio(ctx, 'perdas', r, (d, cats) => {
+    const motivos = d.porMotivo.map(m => `${m.motivo}: ${brl(m.valor_total)}`).join('  |  ');
+    const sub = [descPeriodo(d.filtros, cats), `Registros: ${d.totalRegistros}  |  Valor perdido (custo): ${brl(d.valorTotal)}${motivos ? `  |  ${motivos}` : ''}`];
+    const totalRow = Object.assign(['TOTAL', '', '', '', d.valorTotal], { __bold: true });
+    return {
+      titulo: 'Relatório de Desperdício (perdas e sobras)', subtitulo: sub, landscape: true,
+      sheets: [
+        { name: 'Por produto', title: 'Relatório de Desperdício', subtitle: sub[0],
+          columns: [{ label: 'Produto', width: 36 }, { label: 'Categoria', width: 24 }, { label: 'Unid', width: 8 }, { label: 'Quant. perdida', width: 14, fmt: 'dec' }, { label: 'Valor (custo)', width: 14, fmt: 'money' }],
+          rows: [...d.porProduto.map(p => [p.nome_produto, p.categoria, p.unidade, p.quantidade, p.valor_total]), totalRow] },
+        { name: 'Registros', title: 'Registros de perda', subtitle: sub[1],
+          columns: [{ label: 'Data', width: 17 }, { label: 'Produto', width: 36 }, { label: 'Motivo', width: 16 }, { label: 'Quant.', width: 10, fmt: 'dec' }, { label: 'Unid', width: 8 }, { label: 'Valor (custo)', width: 14, fmt: 'money' }, { label: 'Responsável', width: 18 }, { label: 'Observação', width: 40 }],
+          rows: d.registros.map(r => [r.data_movimentacao, r.produto_nome, r.motivo_perda, r.quantidade, r.unidade, r.valor_total, r.usuario_nome, r.observacao]) }
+      ],
+      sections: [
+        { heading: 'Perdas por produto', columns: [{ label: 'Produto', w: 4.5 }, { label: 'Categoria', w: 3 }, { label: 'Unid', w: 1 }, { label: 'Quant.', w: 1.5, align: 'right' }, { label: 'Valor (custo)', w: 2, align: 'right' }],
+          rows: [...d.porProduto.map(p => [p.nome_produto, p.categoria, p.unidade, num(p.quantidade), brl(p.valor_total)]), Object.assign(['TOTAL', '', '', '', brl(d.valorTotal)], { __bold: true })] },
+        { heading: 'Registros', columns: [{ label: 'Data', w: 2.4 }, { label: 'Produto', w: 4 }, { label: 'Motivo', w: 2.2 }, { label: 'Quant.', w: 1.4, align: 'right' }, { label: 'Valor', w: 1.8, align: 'right' }, { label: 'Responsável', w: 2.4 }],
+          rows: d.registros.map(r => [r.data_movimentacao, r.produto_nome, r.motivo_perda, `${num(r.quantidade)} ${r.unidade}`, brl(r.valor_total), r.usuario_nome]) }
+      ]
     };
   });
 });

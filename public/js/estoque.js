@@ -8,7 +8,9 @@
     const t = $('#estoque-filtro-termo').value.trim().toLowerCase();
     const cat = $('#estoque-filtro-categoria').value;
     const crit = $('#estoque-apenas-criticos').checked;
+    const val = $('#estoque-apenas-validade').checked;
     return produtos.filter(p => (!cat || String(p.id_categoria) === cat) && (!crit || p.quantidade_estoque <= p.estoque_minimo) &&
+      (!val || (GF.validade(p.validade) || {}).alerta) &&
       (!t || `${p.nome_produto} ${p.codigo_barras} ${p.lote} ${p.descricao}`.toLowerCase().includes(t)));
   }
 
@@ -17,23 +19,25 @@
     $('#estoque-resumo').textContent = `${lista.length} de ${produtos.length} produto(s)`;
     $('#estoque-tabela-corpo').innerHTML = lista.length ? lista.map(p => {
       const alerta = p.quantidade_estoque <= p.estoque_minimo;
-      const venc = p.validade ? ` • validade ${GF.date(p.validade)}` : '';
-      return `<tr data-id="${p.id_produto}" title="Mínimo ${GF.qty(p.estoque_minimo)} ${esc(p.unidade)}${venc}">
+      const v = GF.validade(p.validade);
+      return `<tr data-id="${p.id_produto}" title="Mínimo ${GF.qty(p.estoque_minimo)} ${esc(p.unidade)}${v ? ` • ${v.texto}` : ''}">
         <td><strong>${esc(p.nome_produto)}</strong></td>
         <td>${esc(p.unidade)}</td>
         <td><strong style="color:${alerta ? '#dc2626' : '#111827'};">${GF.qty(p.quantidade_estoque)}</strong></td>
         <td>${esc(p.lote || '-')}</td>
+        <td>${!v ? '-' : v.alerta ? `<span class="badge-status-pill ${v.vencido ? 'badge-urgent' : 'badge-warning'}" title="${v.texto}">${GF.date(p.validade)}</span>` : GF.date(p.validade)}</td>
         <td><input type="number" class="figma-input input-contagem" style="width:85px; padding:4px 6px;" min="0" step="${GF.qtyAttrs(p.unidade).step}" value="${p.quantidade_estoque}" data-sistema="${p.quantidade_estoque}" aria-label="Contagem física de ${esc(p.nome_produto)}"></td>
         <td><span class="col-div" style="font-weight:bold; color:#16a34a;">0</span></td></tr>`;
-    }).join('') : '<tr><td colspan="6" style="text-align:center; padding:16px;">Nenhum produto encontrado.</td></tr>';
+    }).join('') : '<tr><td colspan="7" style="text-align:center; padding:16px;">Nenhum produto encontrado.</td></tr>';
   }
 
   async function carregar() {
     try {
+      await GF.syncToday();
       const r = await GF.get('/api/inventory');
       produtos = r.itensParaConferencia;
       render();
-    } catch (e) { $('#estoque-tabela-corpo').innerHTML = '<tr><td colspan="6" style="text-align:center; padding:16px;">Não foi possível carregar o estoque.</td></tr>'; }
+    } catch (e) { $('#estoque-tabela-corpo').innerHTML = '<tr><td colspan="7" style="text-align:center; padding:16px;">Não foi possível carregar o estoque.</td></tr>'; }
   }
 
   function salvar() {
@@ -97,6 +101,7 @@
     ['input', 'change'].forEach(ev => { $('#estoque-filtro-termo').addEventListener(ev, render); });
     $('#estoque-filtro-categoria').addEventListener('change', render);
     $('#estoque-apenas-criticos').addEventListener('change', render);
+    $('#estoque-apenas-validade').addEventListener('change', render);
     $('#estoque-tabela-corpo').addEventListener('input', e => {
       const inp = e.target.closest('.input-contagem'); if (!inp) return;
       inp.classList.remove('input-error');

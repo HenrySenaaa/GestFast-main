@@ -1,8 +1,9 @@
-// relatorios.js - Relatórios de vendas e estoque com filtros e exportação PDF/Excel (RF 12, 13, 14)
+// relatorios.js - Relatórios de vendas, estoque e desperdício com filtros e exportação PDF/Excel (RF 12, 13, 14)
 (function () {
   'use strict';
   const GF = window.GF, $ = GF.$, esc = GF.esc;
   let tipo = 'vendas', categoria = '', ultimo = null;
+  const ROTA = { vendas: 'sales', estoque: 'stock', perdas: 'losses' };
 
   function periodoTexto() {
     const de = $('#rel-de').value, ate = $('#rel-ate').value;
@@ -47,6 +48,18 @@
     $('#rel-footer').classList.remove('is-hidden');
   }
 
+  function renderPerdas(r) {
+    $('#rel-titulo').textContent = `Perdas e sobras ${periodoTexto()}${categoria ? ' • ' + GF.categoryName(categoria) : ''}`;
+    $('#rel-thead').innerHTML = '<tr><th>Produto</th><th>Categoria</th><th>Registros</th><th>Quant. perdida</th><th>Valor (custo)</th></tr>';
+    $('#relatorio-vendas-tabela').innerHTML = r.porProduto.length ? r.porProduto.map(p => `<tr><td><strong>${esc(p.nome_produto)}</strong></td><td>${esc(p.categoria)}</td><td>${p.registros}</td><td class="text-danger-strong">${GF.qty(p.quantidade)} ${esc(p.unidade)}</td><td><strong>${GF.num2(p.valor_total)}</strong></td></tr>`).join('')
+      : '<tr><td colspan="5" class="empty-cell">Nenhuma perda registrada no período ou categoria informada.</td></tr>';
+    $('#rel-kpis').textContent = r.totalRegistros ? `${r.totalRegistros} registro(s) • ${r.porMotivo.map(m => `${m.motivo} ${GF.money(m.valor_total)}`).join(' • ')}` : '';
+    $('#rel-kpis').title = '';
+    $('#rel-pagamentos').innerHTML = '';
+    $('#rel-total-faturamento').textContent = GF.num2(r.valorTotal);
+    $('#rel-footer').classList.remove('is-hidden');
+  }
+
   function validarPeriodo() {
     const de = $('#rel-de').value, ate = $('#rel-ate').value;
     if (de && ate && de > ate) { GF.marcarErro($('#rel-de')); GF.toast('A data inicial não pode ser posterior à data final.', 'error'); return false; }
@@ -57,17 +70,17 @@
     if (!validarPeriodo()) return;
     $('#btn-gerar-relatorio').disabled = true;
     try {
-      const r = (await GF.get(`/api/reports/${tipo === 'vendas' ? 'sales' : 'stock'}?${query()}`)).report;
+      const r = (await GF.get(`/api/reports/${ROTA[tipo]}?${query()}`)).report;
       ultimo = r;
-      tipo === 'vendas' ? renderVendas(r) : renderEstoque(r);
+      ({ vendas: renderVendas, estoque: renderEstoque, perdas: renderPerdas })[tipo](r);
     } catch (e) { ultimo = null; } finally { $('#btn-gerar-relatorio').disabled = false; }
   }
 
   async function exportar(fmt) {
     if (!validarPeriodo()) return;
-    const vazio = ultimo && (tipo === 'vendas' ? !ultimo.itensVendidos.length : !ultimo.linhas.length);
+    const vazio = ultimo && !({ vendas: ultimo.itensVendidos, estoque: ultimo.linhas, perdas: ultimo.porProduto })[tipo].length;
     if (!ultimo || vazio) { GF.toast('Não há dados para exportar. Gere um relatório com resultados primeiro.', 'error'); return; }
-    const ok = await GF.download(`/api/reports/${tipo === 'vendas' ? 'sales' : 'stock'}?${query(fmt)}`, `gestfast-${tipo}.${fmt}`);
+    const ok = await GF.download(`/api/reports/${ROTA[tipo]}?${query(fmt)}`, `gestfast-${tipo}.${fmt}`);
     if (ok) GF.toast(`Relatório exportado em ${fmt === 'pdf' ? 'PDF' : 'Excel'} com sucesso!`, 'success');
   }
 
@@ -84,7 +97,7 @@
   GF.initRelatorios = () => {
     GF.$$('.rel-tab').forEach(b => b.addEventListener('click', () => {
       tipo = b.dataset.rel; GF.$$('.rel-tab').forEach(x => x.classList.toggle('active', x === b));
-      if (tipo === 'estoque' && !$('#rel-de').dataset.setByUser) { $('#rel-de').value = ''; $('#rel-ate').value = ''; }
+      if (tipo !== 'vendas' && !$('#rel-de').dataset.setByUser) { $('#rel-de').value = ''; $('#rel-ate').value = ''; }
       if (tipo === 'vendas' && !$('#rel-de').value) { $('#rel-de').value = GF.today(); $('#rel-ate').value = GF.today(); }
       gerar();
     }));

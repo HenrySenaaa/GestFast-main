@@ -25,6 +25,15 @@
   GF.today = () => { if (GF.state.hoje) return GF.state.hoje; const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
   GF.syncToday = async () => { try { const r = await GF.get('/api/settings', true); GF.state.hoje = r.hoje; GF.state.settings = r.settings; } catch (e) { /* mantém */ } };
   GF.can = perm => GF.state.perms.includes(perm);
+  // Situação da validade: dias até vencer (negativo = vencido) e o rótulo exibido.
+  GF.validade = v => {
+    if (!v) return null;
+    const dias = Math.round((Date.parse(v) - Date.parse(GF.today())) / 86400000);
+    const lim = Number((GF.state.settings || {}).diasAlertaValidade);
+    const alerta = dias <= (Number.isFinite(lim) ? lim : 3);
+    const texto = dias < 0 ? `Vencido há ${-dias} dia(s)` : dias === 0 ? 'Vence hoje' : `Vence em ${dias} dia(s)`;
+    return { dias, alerta, vencido: dias < 0, texto };
+  };
   GF.fractional = un => ['kg', 'lt', 'l'].includes(String(un || '').toLowerCase());
   GF.qtyAttrs = un => (GF.fractional(un) ? { min: '0.001', step: '0.001' } : { min: '1', step: '1' });
   GF.applyQtyAttrs = (input, un) => { const a = GF.qtyAttrs(un); input.min = a.min; input.step = a.step; };
